@@ -174,7 +174,6 @@
 </header>
 <div id="jumpBar"><button id="jumpTop">↑ 跳到顶部</button><button id="jumpPrev">↑ 定位到上一条消息</button></div>
 <button id="toBottom" aria-label="回到最新">↓</button>
-<div id="dbg2" style="display:none;position:fixed;left:6px;right:6px;top:calc(env(safe-area-inset-top,0px) + 96px);z-index:85;font:10px/1.35 ui-monospace,monospace;color:#8a4b00;background:#fff7e6;border:1px solid #f0c48a;border-radius:6px;padding:4px 6px;word-break:break-all"></div>
 <main id="feed">
   <div class="hint" id="hint">
     <b>白色版 · 自动挡</b><br />
@@ -266,7 +265,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.27.5 · 2026-11-04 00:44';
+const APP_VER = '1.28 · 2026-11-04 00:52';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -640,22 +639,6 @@ function renderRich(node, text){
         }catch{}
       });
     }
-    // 诊断：KaTeX 解析失败会留下 .katex-error（红色），把数量和首条错误原因显示出来
-    try{
-      const errs = node.querySelectorAll('.katex-error');
-      const dbg = document.getElementById('dbg2');
-      if (dbg){
-        if (errs.length){
-          const e0 = errs[0];
-          const msg = (e0.getAttribute('title') || '').replace(/\s+/g, ' ').slice(0, 160);
-          const src = (e0.textContent || '').replace(/\s+/g, ' ').slice(0, 120);
-          dbg.style.display = 'block';
-          dbg.textContent = `kerr=${errs.length} | ${msg} | src=${src}`;
-        } else {
-          dbg.style.display = 'none';
-        }
-      }
-    }catch{}
   }catch(e){ node.classList.remove('rendered'); node.textContent = text; }
 }
 let renderTimer = null, renderTarget = null, renderText = '';
