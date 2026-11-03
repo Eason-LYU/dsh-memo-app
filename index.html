@@ -211,6 +211,9 @@
     <div class="row"><label>思考强度</label>
       <select id="cfgEffort"><option value="high">高（默认）</option><option value="max">最大</option><option value="low">低</option></select>
     </div>
+    <div class="row"><label>自动回游</label>
+      <select id="cfgAutoNote"><option value="on">开（每轮自动写一行笔记）</option><option value="off">关（只手动点）</option></select>
+    </div>
     <div class="row"><label>外观</label>
       <select id="cfgTheme"><option value="light">白色</option><option value="dark">深色</option></select>
     </div>
@@ -264,7 +267,7 @@ const cfg = Object.assign({
   key:'', model:'deepseek-flash', theme:'light',
   base:'https://api.deepseek.com',
   repo:'', branch:'main', pat:'', prefix:'pack',
-  web:'auto', think:'auto', effort:'high',
+  web:'auto', think:'auto', effort:'high', autonote:'on',
 }, JSON.parse(localStorage.getItem(LS) || '{}'));
 
 const $ = (id) => document.getElementById(id);
@@ -412,8 +415,7 @@ async function pullPack(){
   setStatus('ok', `记忆 ${(Object.values(files).join('').length/1024).toFixed(0)} KB · ${when}`);
   renderMemo();
 }
-async function appendPhoneNote(text){
-  if (!cfg.repo || !cfg.pat) throw new Error('没配置 GitHub');
+async function appendPhoneNote(text){  if (!cfg.repo || !cfg.pat) throw new Error('没配置 GitHub');
   const d = new Date(); const day = d.toISOString().slice(0,10); const stamp = d.toTimeString().slice(0,5);
   const path = `${cfg.prefix}/phone/${day}.md`;
   let cur = '', sha = null;
@@ -422,6 +424,41 @@ async function appendPhoneNote(text){
   const body = { message: `phone: ${day} ${stamp}`, content: b64encode(cur + `\n- ${stamp} ${text.replace(/\s+/g,' ').slice(0,400)}`), branch: cfg.branch };
   if (sha) body.sha = sha;
   await gh('PUT', path, body);
+}
+
+// 自动回游：每轮结束后让模型压一行结论，写进当天手机笔记
+async function autoNote(userText, answerText, msg){
+  if (cfg.autonote !== 'on' || msg?.noted) return;
+  if (!cfg.repo || !cfg.pat || !cfg.key) return;
+  const u = String(userText || '').slice(0, 300);
+  const a = String(answerText || '').slice(0, 700);
+  if (a.trim().length < 20) return;
+  let line = '';
+  try{
+    const r = await fetch(cfg.base.replace(/\/$/,'') + '/chat/completions', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + cfg.key },
+      body: JSON.stringify({
+        model: 'deepseek-flash',
+        messages: [
+          { role:'system', content:'把这一轮对话压成一行中文笔记，最多 60 字，只写结论/决定/待办/事实；不要开场白、不要客套、不要写“用户”。没有值得记的就只输出：跳过' },
+          { role:'user', content: '问：' + u + '\n答：' + a },
+        ],
+        max_tokens: 120,
+        temperature: 0.3,
+        thinking: { type: 'disabled' },
+      }),
+    });
+    if (!r.ok) return;
+    const j = await r.json();
+    line = (j.choices?.[0]?.message?.content || '').trim().replace(/\s+/g,' ');
+  }catch{ return; }
+  if (!line || line.includes('跳过')) return;
+  try{
+    await appendPhoneNote('🤖 ' + line.slice(0,120));
+    if (msg) msg.noted = true;
+    toast('已自动记入笔记');
+  }catch{}
 }
 
 /* ---------- 记忆面板 ---------- */
@@ -501,7 +538,7 @@ function addMessage(m){
     cp.onclick = async ()=>{ try{ await navigator.clipboard.writeText(m.content); toast('已复制'); }catch{ toast('复制失败'); } };
     meta.appendChild(cp);
     const nt = el('button','chip','记进笔记');
-    nt.onclick = async ()=>{ try{ await appendPhoneNote(m.content); toast('已写入手机笔记'); }catch(e){ toast('失败：'+e.message,3000); } };
+    nt.onclick = async ()=>{ try{ await appendPhoneNote(m.content); m.noted = true; toast('已写入手机笔记'); }catch(e){ toast('失败：'+e.message,3000); } };
     meta.appendChild(nt);
   }
   if (m.sources?.length){
@@ -742,6 +779,7 @@ async function send(){
     }
     draft.push({ role:'assistant', content: am.content, reasoning: am.reasoning, web: am.web, sources: am.sources });
     persistCurrent();
+    autoNote(text, am.content, am);
   }catch(e){
     body.textContent = '出错了：' + e.message;
     if (e.message.includes('Failed to fetch')) body.textContent += '\n（网络或 API 地址问题）';
@@ -804,6 +842,7 @@ function syncTools(){
 function fillSettings(){
   $('cfgKey').value = cfg.key; $('cfgModel').value = cfg.model;
   $('cfgWeb').value = cfg.web; $('cfgThink').value = cfg.think; $('cfgEffort').value = cfg.effort;
+  $('cfgAutoNote').value = cfg.autonote || 'on';
   $('cfgTheme').value = cfg.theme; $('cfgBase').value = cfg.base; $('cfgRepo').value = cfg.repo;
   $('cfgBranch').value = cfg.branch; $('cfgPat').value = cfg.pat; $('cfgPrefix').value = cfg.prefix;
 }
@@ -813,6 +852,7 @@ $('saveCfg').onclick = async ()=>{
   cfg.key = $('cfgKey').value.trim();
   cfg.model = $('cfgModel').value;
   cfg.web = $('cfgWeb').value; cfg.think = $('cfgThink').value; cfg.effort = $('cfgEffort').value;
+  cfg.autonote = $('cfgAutoNote').value;
   cfg.theme = $('cfgTheme').value;
   cfg.base = $('cfgBase').value.trim() || 'https://api.deepseek.com';
   cfg.repo = $('cfgRepo').value.trim(); cfg.branch = $('cfgBranch').value.trim() || 'main';
