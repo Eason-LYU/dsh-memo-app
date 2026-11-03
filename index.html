@@ -138,6 +138,8 @@
     <div class="row"><label>包目录</label><input id="cfgPrefix" placeholder="pack" /></div>
     <p class="note">Key 与 PAT 只存在这台手机的浏览器里（localStorage），不会上传到别处。PAT 只给数据仓 Contents 读写权限即可。</p>
     <button class="btn" id="saveCfg">保存并同步</button>
+    <button class="btn ghost" id="diagBtn">诊断</button>
+    <pre id="diagOut" style="display:none;margin-top:10px"></pre>
     <button class="btn ghost" id="closeSet">关闭</button>
   </div>
 </div>
@@ -194,11 +196,14 @@ function b64encode(str){
 }
 
 /* ---------- GitHub ---------- */
+const lastGh = { errors: [] };
+function ghUrl(p, method){
+  return `https://api.github.com/repos/${cfg.repo}/contents/${p.split('/').map(encodeURIComponent).join('/')}`
+    + (method === 'GET' ? `?ref=${encodeURIComponent(cfg.branch)}` : '');
+}
 async function gh(method, p, body){
   if (!cfg.repo || !cfg.pat) throw new Error('还没填数据仓/PAT');
-  const url = `https://api.github.com/repos/${cfg.repo}/contents/${p.split('/').map(encodeURIComponent).join('/')}`
-    + (method === 'GET' ? `?ref=${encodeURIComponent(cfg.branch)}` : '');
-  const res = await fetch(url, {
+  const res = await fetch(ghUrl(p, method), {
     method,
     headers: {
       'Authorization': 'Bearer ' + cfg.pat,
@@ -209,18 +214,44 @@ async function gh(method, p, body){
     body: body ? JSON.stringify(body) : undefined
   });
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error('GitHub ' + res.status + ' ' + (await res.text()).slice(0,160));
+  if (!res.ok){
+    const t = await res.text();
+    lastGh.errors.push(`${method} ${p} → ${res.status}`);
+    throw new Error(`GitHub ${res.status} ${p}：${t.slice(0,120)}`);
+  }
   return res.json();
 }
 
+// 只填了仓库名（没有 owner）时，用当前 token 的登录名补上前缀
+async function normalizeRepo(){
+  if (!cfg.repo || cfg.repo.includes('/')) return cfg.repo;
+  const me = await fetch('https://api.github.com/user', {
+    headers: { 'Authorization': 'Bearer ' + cfg.pat, 'User-Agent': 'dsh-memo' }
+  }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  if (me?.login){ cfg.repo = me.login + '/' + cfg.repo; saveCfg(); }
+  return cfg.repo;
+}
+
 async function pullPack(){
+  await normalizeRepo();
   const names = ['persona.md','rules.md','style.md','recent.md','skills.md','meta.json'];
   const files = {};
+  const status = [];
   for (const n of names){
-    const r = await gh('GET', `${cfg.prefix}/${n}`).catch(()=>null);
+    let r = null;
+    try { r = await gh('GET', `${cfg.prefix}/${n}`) }
+    catch(e){ status.push(`${n}: ${e.message.slice(0,60)}`); continue }
     if (r && r.content) files[n] = b64decode(r.content);
+    else status.push(`${n}: 404`);
   }
-  if (!Object.keys(files).length) throw new Error('数据仓里还没有记忆包（先在电脑上跑一次 push）');
+  if (!Object.keys(files).length){
+    const hint = [
+      `仓库 ${cfg.repo} · 分支 ${cfg.branch} · 目录 ${cfg.prefix}`,
+      `PAT 长度 ${cfg.pat.length}`,
+      ...status.slice(0,3),
+    ].join(' / ');
+    throw new Error('没读到记忆包：' + hint);
+  }
   pack = { files, at: new Date() };
   const meta = files['meta.json'] ? JSON.parse(files['meta.json']) : null;
   const when = meta?.generatedAt ? new Date(meta.generatedAt).toLocaleString() : '未知时间';
@@ -392,8 +423,35 @@ $('saveCfg').onclick = async ()=>{
   saveCfg();
   $('sheetSet').classList.remove('open');
   toast('已保存');
-  try{ await pullPack(); toast('记忆包已同步'); }
-  catch(e){ setStatus('warn','同步失败'); toast(e.message, 3600); }
+  try{ await normalizeRepo(); await pullPack(); toast('记忆包已同步'); }
+  catch(e){ setStatus('warn','同步失败'); toast(e.message, 6000); }
+};
+$('diagBtn').onclick = async ()=>{
+  const out = $('diagOut');
+  out.style.display = 'block';
+  out.textContent = '检查中…';
+  const lines = [];
+  lines.push(`repo=${cfg.repo}  branch=${cfg.branch}  prefix=${cfg.prefix}`);
+  lines.push(`PAT 长度=${cfg.pat.length}  开头=${cfg.pat.slice(0, 11)}`);
+  try{
+    const r = await fetch('https://api.github.com/user', { headers: { Authorization: 'Bearer ' + cfg.pat, 'User-Agent': 'dsh-memo' } });
+    lines.push(`token → HTTP ${r.status}`);
+    if (r.ok){ const j = await r.json(); lines.push(`登录名=${j.login}`); }
+  }catch(e){ lines.push('token 检查失败：' + e.message); }
+  for (const p of [cfg.prefix, `${cfg.prefix}/meta.json`]){
+    try{
+      const r = await fetch(ghUrl(p, 'GET'), {
+        headers: { Authorization: 'Bearer ' + cfg.pat, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
+      });
+      lines.push(`${p} → HTTP ${r.status}`);
+      if (r.ok){
+        const j = await r.json();
+        if (Array.isArray(j)) lines.push('  目录内容: ' + j.map((x) => x.name).join(', '));
+        else lines.push('  文件大小: ' + (j.size ?? '?') + 'B');
+      }
+    }catch(e){ lines.push(`${p} 请求失败：` + e.message); }
+  }
+  out.textContent = lines.join('\n');
 };
 $('btnMemo').onclick = ()=>{ renderMemo(); $('sheetMemo').classList.add('open'); };
 $('closeMemo').onclick = ()=> $('sheetMemo').classList.remove('open');
