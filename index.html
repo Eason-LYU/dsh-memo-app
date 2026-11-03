@@ -155,7 +155,7 @@
   <button class="iconbtn" id="btnMenu">☰</button>
   <div class="hbar">
     <div class="title" id="chatTitle">新对话</div>
-    <div class="sub"><span class="dot" id="statusDot"></span> <span id="statusText">未同步</span></div>
+    <div class="sub"><span class="dot" id="statusDot"></span> <span id="statusText">未同步</span> · <span id="verShort">v11</span></div>
   </div>
   <button class="iconbtn" id="btnNew">＋</button>
   <button class="iconbtn" id="btnMemo">记忆</button>
@@ -229,6 +229,7 @@
     <p class="note">Key 与 PAT 只存在这台手机的浏览器里。PAT 只需数据仓的 Contents 读写权限。</p>
     <p class="note" id="verLine"></p>
     <button class="btn" id="saveCfg">保存并同步</button>
+    <button class="btn ghost" id="forceBtn">强制更新（清缓存重载）</button>
     <button class="btn ghost" id="exportCfg">复制配置（换设备/换入口用）</button>
     <button class="btn ghost" id="importCfg">粘贴配置</button>
     <button class="btn ghost" id="diagBtn">诊断</button>
@@ -252,7 +253,8 @@
 
 <script>
 'use strict';
-const APP_VER = 'v11 · 2026-11-03 20:45';
+const APP_VER = 'v12 · 2026-11-03 20:56';
+const APP_SHORT = APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
 (function migrate(){
@@ -861,8 +863,7 @@ $('btnWeb').onclick = cycleWeb;
 $('btnThink').onclick = cycleThink;
 $('btnModel').onclick = ()=>{ cfg.model = cfg.model==='deepseek-flash'?'deepseek-v4-pro':'deepseek-flash'; saveCfg(); syncTools(); toast('模型：'+cfg.model); };
 
-function syncTools(){
-  const webLabel = { auto:'联网·自动', on:'联网·开', off:'联网·关' }[cfg.web];
+function syncTools(){  const webLabel = { auto:'联网·自动', on:'联网·开', off:'联网·关' }[cfg.web];
   const thinkLabel = { auto:'思考·自动', on:'思考·' + ({high:'高',max:'最大',low:'低'}[cfg.effort]||cfg.effort), off:'思考·关' }[cfg.think];
   $('btnWeb').textContent = webLabel;
   $('btnThink').textContent = thinkLabel;
@@ -878,6 +879,29 @@ function updateVerLine(){
   const el2 = $('verLine');
   if (el2) el2.textContent = `版本 ${APP_VER} · 渲染库 ${libs.length ? libs.join(' / ') : '未加载'} · ${memo}`;
 }
+function forceUpdate(){
+  (async () => {
+    try{ if ('caches' in window){ const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); } }catch{}
+    try{
+      if ('serviceWorker' in navigator){
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+    }catch{}
+    location.reload();
+  })();
+}
+function libsOK(){ return !!(window.marked && window.DOMPurify && window.katex && window.renderMathInElement); }
+function showRenderBanner(){
+  if (libsOK()) return;
+  const b = document.createElement('div');
+  b.style.cssText = 'position:fixed;left:8px;right:8px;top:calc(env(safe-area-inset-top,0px) + 60px);z-index:70;'
+    + 'background:#fff4e5;border:1px solid #f0c48a;color:#8a4b00;border-radius:12px;padding:10px 12px;font-size:13px;'
+    + 'box-shadow:0 6px 20px #0002';
+  b.textContent = '渲染库没加载（页面是旧缓存）。点这里强制更新 →';
+  b.onclick = forceUpdate;
+  document.body.appendChild(b);
+}
 function fillSettings(){
   $('cfgKey').value = cfg.key; $('cfgModel').value = cfg.model;
   $('cfgWeb').value = cfg.web; $('cfgThink').value = cfg.think; $('cfgEffort').value = cfg.effort;
@@ -888,6 +912,7 @@ function fillSettings(){
 }
 $('btnSet').onclick = ()=>{ fillSettings(); $('sheetSet').classList.add('open'); };
 $('closeSet').onclick = ()=> $('sheetSet').classList.remove('open');
+$('forceBtn').onclick = forceUpdate;
 $('saveCfg').onclick = async ()=>{
   cfg.key = $('cfgKey').value.trim();
   cfg.model = $('cfgModel').value;
@@ -945,6 +970,8 @@ $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新�
 (async function boot(){
   if ('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
   syncTools(); renderMemo();
+  $('verShort').textContent = APP_SHORT;
+  setTimeout(showRenderBanner, 800);
   if (chats.length) openChat(chats[0].id); else newChat();
   if (!cfg.repo || !cfg.pat){ setStatus('', '未配置记忆'); return; }
   try{ await pullPack(); }catch(e){ setStatus('warn','记忆未同步'); }
