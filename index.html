@@ -252,7 +252,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.16 · 2026-11-03 21:33';
+const APP_VER = '1.17 · 2026-11-03 21:42';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -611,6 +611,10 @@ function renderRail(){
       const img = el('img'); img.src = a.dataUrl; th.appendChild(img);
       const x = el('span','','×'); x.onclick = ()=>{ attachments.splice(i,1); renderRail(); };
       th.appendChild(x); rail.appendChild(th);
+    } else if (a.kind === 'pdf'){
+      const c = el('div','filechip', `📕 ${a.name} · ${a.pages}页`);
+      const x = el('span','',' ×'); x.onclick = ()=>{ attachments.splice(i,1); renderRail(); };
+      c.appendChild(x); rail.appendChild(c);
     } else {
       const c = el('div','filechip','📄 ' + a.name);
       const x = el('span','',' ×'); x.onclick = ()=>{ attachments.splice(i,1); renderRail(); };
@@ -764,6 +768,7 @@ function systemPrompt(){
   parts.push(cfg.web === 'off'
     ? '你有两个工具：fetch_url（读网页正文）、tell_joke（本地冷笑话）。需要时自己调用。'
     : '你有三个工具：web_search（联网检索）、fetch_url（读网页正文）、tell_joke（本地冷笑话）。判断需要时自己调用，不需要就别调；引用检索结果时标 [编号]。');
+  parts.push('如果用户发来 PDF，正文里会带【pN】页码标记；回答时按页码定位并标明出处（如“p7”），需要跨页串联就说明范围。');
   return parts.join('\n\n');
 }
 function buildUserContent(text){
@@ -771,9 +776,38 @@ function buildUserContent(text){
   const parts = [{ type:'text', text: text || '' }];
   for (const a of attachments){
     if (a.kind === 'image') parts.push({ type:'image_url', image_url: { url: a.dataUrl } });
+    else if (a.kind === 'pdf') parts.push({ type:'text', text: `【附件 PDF：${a.name}】\n${a.text}` });
     else parts.push({ type:'file', file_data: a.dataUrl, filename: a.name });
   }
   return parts;
+}
+
+// PDF：本机用 pdf.js 抽全文（带页码标记），把文字发给模型，而不是塞二进制
+let pdfjsLib = null;
+async function getPdfjs(){
+  if (pdfjsLib) return pdfjsLib;
+  const mod = await import('./vendor/pdf/pdf.min.mjs');
+  mod.GlobalWorkerOptions.workerSrc = './vendor/pdf/pdf.worker.min.mjs';
+  pdfjsLib = mod;
+  return mod;
+}
+async function extractPdf(file, maxPages = 80, maxChars = 60000){
+  const pdfjs = await getPdfjs();
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
+  const n = Math.min(doc.numPages, maxPages);
+  const out = [];
+  let chars = 0;
+  for (let i = 1; i <= n; i++){
+    const page = await doc.getPage(i);
+    const tc = await page.getTextContent();
+    const line = tc.items.map((it) => it.str).join(' ').replace(/\s+/g, ' ').trim();
+    const block = `【p${i}】${line}`;
+    out.push(block);
+    chars += block.length;
+    if (chars > maxChars){ out.push(`…（已截断，原文档共 ${doc.numPages} 页）`); break; }
+  }
+  return { text: out.join('\n'), pages: doc.numPages };
 }
 
 // 一次流式请求；返回累积内容、思考、工具调用
@@ -948,7 +982,6 @@ $('input').addEventListener('focus', ()=>{
   setTimeout(()=>{
     syncAppHeight();
     feed.scrollTop = feed.scrollHeight;
-    try{ $('input').scrollIntoView({ block:'nearest' }); }catch{}
   }, 280);
 });
 $('input').addEventListener('blur', ()=>{
@@ -974,7 +1007,17 @@ $('fileImg').onchange = async (e)=>{
 };
 $('fileDoc').onchange = async (e)=>{
   for (const f of e.target.files){
-    if (f.size > 8*1024*1024){ toast('文件太大（>8MB）'); continue; }
+    if (f.size > 30*1024*1024){ toast('文件太大（>30MB）'); continue; }
+    const isPdf = /\.pdf$/i.test(f.name) || f.type === 'application/pdf';
+    if (isPdf){
+      toast('正在解析 PDF…', 4000);
+      try{
+        const r = await extractPdf(f);
+        attachments.push({ kind:'pdf', name:f.name, text:r.text, pages:r.pages });
+        toast(`已读取 ${r.pages} 页（约 ${(r.text.length/1000).toFixed(0)}k 字）`, 3200);
+      }catch(err){ toast('PDF 解析失败：' + err.message, 4000); }
+      continue;
+    }
     attachments.push({ kind:'file', name:f.name, dataUrl: await readAsDataUrl(f) });
   }
   e.target.value=''; renderRail();
