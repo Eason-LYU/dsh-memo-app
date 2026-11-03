@@ -32,6 +32,7 @@
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
+  @supports (height: 100dvh){ html,body{height:100dvh} }
   body{margin:0;background:var(--bg);color:var(--text);
     font:16px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
     display:flex;flex-direction:column;overscroll-behavior:none;overflow-x:hidden;max-width:100vw}
@@ -49,7 +50,7 @@
   .iconbtn{border:1px solid var(--line);background:var(--panel);color:var(--text);
     border-radius:10px;padding:0 10px;font-size:13px;height:34px;line-height:32px;white-space:nowrap}
   .iconbtn:active{transform:scale(.97)}
-  main{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 12px 10px;-webkit-overflow-scrolling:touch}
+  main{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:16px 12px 14px;-webkit-overflow-scrolling:touch}
   .row-msg{display:flex;gap:8px;margin:0 0 16px;align-items:flex-start}
   .row-msg.user{flex-direction:row-reverse}
   .avatar{width:28px;height:28px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;
@@ -62,6 +63,7 @@
     background:var(--bubble-ai);color:var(--text);border-bottom-left-radius:5px}
   .row-msg.user .bubble{background:var(--bubble-user);color:var(--accent-ink);border-bottom-left-radius:16px;border-bottom-right-radius:5px}
   .bubble p{margin:0 0 8px}
+  .bubble:empty::after{content:'…';color:var(--dim)}
   .bubble p:last-child{margin-bottom:0}
   .bubble h1,.bubble h2,.bubble h3{font-size:15px;margin:10px 0 6px}
   .bubble ul,.bubble ol{margin:0 0 8px;padding-left:20px}
@@ -506,13 +508,14 @@ function renderRich(node, text){
   }catch(e){ node.textContent = text; }
 }
 let renderTimer = null, renderTarget = null, renderText = '';
-function scheduleRender(node, text){
+function nearBottom(){ return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 140; }
+function scheduleRender(node, text, stick){
   renderTarget = node; renderText = text;
   if (renderTimer) return;
   renderTimer = setTimeout(() => {
     renderTimer = null;
     renderRich(renderTarget, renderText);
-    feed.scrollTop = feed.scrollHeight;
+    if (stick) feed.scrollTop = feed.scrollHeight;
   }, 140);
 }
 function addMessage(m){
@@ -710,7 +713,7 @@ async function send(){
   };
   const ui = {
     onReason(t){ am.reasoning = t; ensureReason(); reasonDiv.textContent = t; feed.scrollTop = feed.scrollHeight; },
-    onContent(t){ am.content = t; scheduleRender(body, t); },
+    onContent(t){ am.content = t; scheduleRender(body, t, nearBottom()); },
   };
 
   const prior = draft.slice(0, -1).slice(-18);
@@ -769,6 +772,7 @@ async function send(){
 
     am.content = collected || '（空回复）';
     renderRich(body, am.content);
+    feed.scrollTop = feed.scrollHeight;
     if (am.sources.length){
       const box = el('div','srcs');
       for (const s of am.sources){
