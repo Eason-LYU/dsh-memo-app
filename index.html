@@ -265,7 +265,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.26 · 2026-11-03 23:05';
+const APP_VER = '1.27 · 2026-11-03 23:35';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -551,12 +551,21 @@ const MD_DELIMS = [
   { left:'$', right:'$', display:false },
   { left:'\\(', right:'\\)', display:false },
 ];
+// KaTeX 里 % 是注释符，公式中的百分号必须写成 \%。模型常直接写 81.5%，
+// 会把后半截当注释吞掉 → KaTeX 报错并整行标红。渲染前统一补转义。
+function escapeMathPercent(s){
+  return String(s || '').replace(/\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$/g, (m, block, inline) => {
+    const body = block != null ? block : inline;
+    const fixed = body.replace(/(^|[^\\])%/g, '$1\\%');
+    return block != null ? '$$' + fixed + '$$' : '$' + fixed + '$';
+  });
+}
 function renderRich(node, text){
   node.dataset.raw = text || '';
   if (!text){ node.textContent = ''; return; }
   if (!(window.marked && window.DOMPurify)){ node.classList.remove('rendered'); node.textContent = text; return; }
   try{
-    const html = window.marked.parse(text, { breaks:true, gfm:true });
+    const html = window.marked.parse(escapeMathPercent(text), { breaks:true, gfm:true });
     node.innerHTML = window.DOMPurify.sanitize(html, { ADD_ATTR: ['target','rel'] });
     node.classList.add('rendered');
     // 模型有时把 LaTeX 包进反引号（行内代码），会被 KaTeX 的 ignoredTags 跳过而显示源码。
