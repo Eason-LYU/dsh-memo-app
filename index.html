@@ -254,7 +254,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.19 · 2026-11-03 22:02';
+const APP_VER = '1.20 · 2026-11-03 22:08';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -282,11 +282,16 @@ const cfg = Object.assign({
 const $ = (id) => document.getElementById(id);
 const feed = $('feed');
 
-// iOS 键盘：不改页面高度（那会让系统滚动整页），只把底栏上抬键盘高度，正文区补底部留白
+// iOS 键盘：只上抬「键盘真正遮住的高度」。
+// iOS 可能已经把布局视口（dvh）压小了；若再用 innerHeight 算会重复扣减，底栏就飞到半空。
+// 因此基准取 documentElement.clientHeight（随 dvh 变），它与可视视口之差才是需要补的偏移。
 function syncKeyboard(){
   const vv = window.visualViewport;
   if (!vv) return;
-  const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+  const layoutH = document.documentElement.clientHeight || window.innerHeight;
+  let kb = Math.round(layoutH - vv.height - vv.offsetTop);
+  if (!isFinite(kb) || kb < 0) kb = 0;
+  if (kb > layoutH * 0.6) kb = 0;
   document.documentElement.style.setProperty('--kb', kb + 'px');
   if (kb > 0) feed.scrollTop = feed.scrollHeight;
 }
