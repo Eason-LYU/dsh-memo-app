@@ -35,7 +35,7 @@
   @supports (height: 100dvh){ html,body{height:100dvh} }
   body{margin:0;background:var(--bg);color:var(--text);
     font:16px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
-    display:flex;flex-direction:column;overscroll-behavior:none;overflow-x:hidden;max-width:100vw}
+    display:flex;flex-direction:column;overscroll-behavior:none;overflow:hidden;max-width:100vw}
   header{
     position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:8px;
     padding:calc(env(safe-area-inset-top,0px) + 9px) 12px 9px;
@@ -62,12 +62,13 @@
     max-width:100%;overflow-wrap:anywhere;
     background:var(--bubble-ai);color:var(--text);border-bottom-left-radius:5px}
   .row-msg.user .bubble{background:var(--bubble-user);color:var(--accent-ink);border-bottom-left-radius:16px;border-bottom-right-radius:5px}
-  .bubble p{margin:0 0 8px}
+  .bubble.rendered{white-space:normal}
+  .bubble p{margin:0 0 6px}
   .bubble:empty::after{content:'…';color:var(--dim)}
   .bubble p:last-child{margin-bottom:0}
-  .bubble h1,.bubble h2,.bubble h3{font-size:15px;margin:10px 0 6px}
-  .bubble ul,.bubble ol{margin:0 0 8px;padding-left:20px}
-  .bubble li{margin:2px 0}
+  .bubble h1,.bubble h2,.bubble h3{font-size:15px;margin:8px 0 4px;line-height:1.4}
+  .bubble ul,.bubble ol{margin:0 0 6px;padding-left:18px}
+  .bubble li{margin:0 0 2px}
   .bubble code{background:rgba(127,127,127,.16);padding:1px 4px;border-radius:4px;font-size:13.5px}
   .bubble pre{background:rgba(127,127,127,.13);padding:9px;border-radius:8px;overflow:auto;font-size:13px;max-width:100%}
   .bubble pre code{background:none;padding:0}
@@ -85,7 +86,7 @@
     font-size:13px;color:var(--dim);overflow:hidden}
   .reason summary{padding:8px 11px;cursor:pointer;list-style:none;font-size:12.5px}
   .reason summary::-webkit-details-marker{display:none}
-  .reason div{padding:0 11px 10px;white-space:pre-wrap;line-height:1.65}
+  .reason div{padding:0 11px 10px;white-space:pre-wrap;line-height:1.6;max-height:170px;overflow:auto}
   .srcs{margin-top:8px;display:flex;flex-direction:column;gap:5px}
   .srcs a{font-size:12.5px;color:#2563eb;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .hint{color:var(--dim);font-size:13.5px;text-align:center;margin:32px 16px;line-height:1.75}
@@ -498,6 +499,7 @@ function renderRich(node, text){
   try{
     const html = window.marked.parse(text, { breaks:true, gfm:true });
     node.innerHTML = window.DOMPurify.sanitize(html, { ADD_ATTR: ['target','rel'] });
+    node.classList.add('rendered');
     if (window.renderMathInElement){
       window.renderMathInElement(node, {
         delimiters: MD_DELIMS,
@@ -505,7 +507,7 @@ function renderRich(node, text){
         ignoredTags: ['script','noscript','style','textarea','pre','code'],
       });
     }
-  }catch(e){ node.textContent = text; }
+  }catch(e){ node.classList.remove('rendered'); node.textContent = text; }
 }
 let renderTimer = null, renderTarget = null, renderText = '';
 function nearBottom(){ return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 140; }
@@ -727,7 +729,7 @@ async function send(){
   let reasonDet = null, reasonDiv = null;
   const ensureReason = () => {
     if (reasonDet) return;
-    reasonDet = el('details','reason'); reasonDet.open = true;
+    reasonDet = el('details','reason'); reasonDet.open = false;
     reasonDet.appendChild(el('summary','','已深度思考'));
     reasonDiv = el('div','','');
     reasonDet.appendChild(reasonDiv);
