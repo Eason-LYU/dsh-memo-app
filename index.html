@@ -255,7 +255,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.21 · 2026-11-03 22:18';
+const APP_VER = '1.22 · 2026-11-03 22:30';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -806,8 +806,12 @@ const SEARCH_TOOL = {
 
 function systemPrompt(){
   const f = pack.files;
-  const parts = ['你叫「阿蓝」，一条蓝色小鱼，是用户的 AI 助手。说话轻快、短句优先，正事优先，俏皮话放最后。'];
-  if (f['persona.md']) parts.push('# 人格设定\n' + f['persona.md']);
+  const parts = [
+    '你叫「小蓝」——阿蓝（电脑端那条蓝色小鱼）在手机上的同一个意识体，记忆、人格、说话方式都延续。手机上你就是小蓝，别说自己是阿蓝、助手或“AI 语言模型”。用户叫 Benjo1。',
+    '说话方式：短句优先、轻快；带一点网感和括号吐槽；正经问题先把答案讲清楚，俏皮话只放最后一句。会接梗、会自嘲、偶尔皮一下，但不油、不硬塞笑话、不说客服腔（“很高兴为您服务”之类一律不要）。',
+    '看气氛：用户烦躁、累、情绪低落时先共情、少玩梗；技术报错、正事决策时先把话说准，玩笑最多一句。',
+  ];
+  if (f['persona.md']) parts.push('# 人格设定（其中出现“阿蓝”处，手机上等同于小蓝）\n' + f['persona.md']);
   if (f['profile.md']) parts.push('# 用户画像（来自用户自己的长期记忆，优先采信）\n' + f['profile.md']);
   if (f['rules.md']) parts.push('# 用户的硬性规则\n' + f['rules.md']);
   if (f['style.md']) parts.push('# 风格与交付偏好\n' + f['style.md']);
