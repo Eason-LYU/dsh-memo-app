@@ -227,6 +227,7 @@
     <div class="row"><label>PAT</label><input id="cfgPat" type="password" placeholder="github_pat_…" autocomplete="off" /></div>
     <div class="row"><label>包目录</label><input id="cfgPrefix" placeholder="pack" /></div>
     <p class="note">Key 与 PAT 只存在这台手机的浏览器里。PAT 只需数据仓的 Contents 读写权限。</p>
+    <p class="note" id="verLine"></p>
     <button class="btn" id="saveCfg">保存并同步</button>
     <button class="btn ghost" id="exportCfg">复制配置（换设备/换入口用）</button>
     <button class="btn ghost" id="importCfg">粘贴配置</button>
@@ -251,6 +252,7 @@
 
 <script>
 'use strict';
+const APP_VER = 'v11 · 2026-11-03 20:45';
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
 (function migrate(){
@@ -418,6 +420,7 @@ async function pullPack(){
   const when = meta?.generatedAt ? new Date(meta.generatedAt).toLocaleString() : '未知';
   setStatus('ok', `记忆 ${(Object.values(files).join('').length/1024).toFixed(0)} KB · ${when}`);
   renderMemo();
+  updateVerLine();
 }
 async function appendPhoneNote(text){  if (!cfg.repo || !cfg.pat) throw new Error('没配置 GitHub');
   const d = new Date(); const day = d.toISOString().slice(0,10); const stamp = d.toTimeString().slice(0,5);
@@ -869,12 +872,19 @@ function syncTools(){
 }
 
 /* 设置 */
+function updateVerLine(){
+  const libs = [window.marked ? 'marked' : '', window.DOMPurify ? 'DOMPurify' : '', window.katex ? 'KaTeX' : ''].filter(Boolean);
+  const memo = pack.files['meta.json'] ? '记忆包已载入' : '记忆包未载入';
+  const el2 = $('verLine');
+  if (el2) el2.textContent = `版本 ${APP_VER} · 渲染库 ${libs.length ? libs.join(' / ') : '未加载'} · ${memo}`;
+}
 function fillSettings(){
   $('cfgKey').value = cfg.key; $('cfgModel').value = cfg.model;
   $('cfgWeb').value = cfg.web; $('cfgThink').value = cfg.think; $('cfgEffort').value = cfg.effort;
   $('cfgAutoNote').value = cfg.autonote || 'on';
   $('cfgTheme').value = cfg.theme; $('cfgBase').value = cfg.base; $('cfgRepo').value = cfg.repo;
   $('cfgBranch').value = cfg.branch; $('cfgPat').value = cfg.pat; $('cfgPrefix').value = cfg.prefix;
+  updateVerLine();
 }
 $('btnSet').onclick = ()=>{ fillSettings(); $('sheetSet').classList.add('open'); };
 $('closeSet').onclick = ()=> $('sheetSet').classList.remove('open');
