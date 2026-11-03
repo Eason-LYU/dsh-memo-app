@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content" />
 <meta name="theme-color" content="#ffffff" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -31,8 +31,7 @@
     --bubble-ai:#1c212b; --bubble-user:#f3f4f6;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{height:100%}
-  @supports (height: 100dvh){ html,body{height:100dvh} }
+  html,body{height:100%;height:var(--app-h,100dvh)}
   body{margin:0;background:var(--bg);color:var(--text);
     font:16px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
     display:flex;flex-direction:column;overscroll-behavior:none;overflow:hidden;max-width:100vw}
@@ -253,7 +252,7 @@
 
 <script>
 'use strict';
-const APP_VER = 'v12 · 2026-11-03 20:56';
+const APP_VER = 'v13 · 2026-11-03 21:05';
 const APP_SHORT = APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -280,6 +279,29 @@ const cfg = Object.assign({
 
 const $ = (id) => document.getElementById(id);
 const feed = $('feed');
+
+// iOS 键盘：visualViewport 变化时同步真实高度，避免键盘收起后留白、内容“卡在半空”
+function syncAppHeight(){
+  const vv = window.visualViewport;
+  const h = vv ? vv.height : window.innerHeight;
+  document.documentElement.style.setProperty('--app-h', Math.round(h) + 'px');
+}
+let vpRaf = null;
+function onViewportChange(){
+  if (vpRaf) return;
+  vpRaf = requestAnimationFrame(() => {
+    vpRaf = null;
+    syncAppHeight();
+    feed.scrollTop = feed.scrollHeight;
+  });
+}
+syncAppHeight();
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', onViewportChange);
+  window.visualViewport.addEventListener('scroll', onViewportChange);
+}
+window.addEventListener('orientationchange', onViewportChange);
+window.addEventListener('resize', onViewportChange);
 let pack = { files:{}, at:null };
 let chats = loadChats();
 let curId = null;
@@ -826,6 +848,8 @@ async function send(){
 $('send').onclick = send;
 $('input').addEventListener('keydown', (e)=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
 $('input').addEventListener('input', (e)=>{ e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'; });
+$('input').addEventListener('focus', ()=>{ setTimeout(()=>{ syncAppHeight(); feed.scrollTop = feed.scrollHeight; }, 300); });
+$('input').addEventListener('blur', ()=>{ setTimeout(onViewportChange, 120); });
 
 $('btnMenu').onclick = ()=>{ renderChatList(); $('drawer').classList.add('open'); };
 $('drawerMask').onclick = ()=> $('drawer').classList.remove('open');
