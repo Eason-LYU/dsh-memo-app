@@ -49,7 +49,7 @@
   .iconbtn{border:1px solid var(--line);background:var(--panel);color:var(--text);
     border-radius:10px;padding:0 10px;font-size:13px;height:34px;line-height:32px;white-space:nowrap}
   .iconbtn:active{transform:scale(.97)}
-  main{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:16px 12px 14px;-webkit-overflow-scrolling:touch}
+  main{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:16px 12px calc(14px + var(--kb,0px));-webkit-overflow-scrolling:touch}
   .row-msg{display:flex;gap:8px;margin:0 0 16px;align-items:flex-start}
   .row-msg.user{flex-direction:row-reverse}
   .avatar{width:28px;height:28px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;
@@ -93,7 +93,8 @@
   .hint b{color:var(--text)}
   footer{position:sticky;bottom:0;z-index:20;padding:8px 10px calc(8px + var(--safe-b));
     background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(14px);
-    border-top:1px solid var(--line)}
+    border-top:1px solid var(--line);transform:translateY(calc(var(--kb,0px) * -1));
+    transition:transform .16s ease-out}
   .tools{display:flex;gap:6px;align-items:center;margin-bottom:8px;overflow-x:auto;padding-bottom:2px}
   .tool{border:1px solid var(--line);background:var(--panel);color:var(--dim);
     border-radius:9px;padding:0 9px;font-size:12.5px;white-space:nowrap;height:30px;line-height:28px}
@@ -253,7 +254,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.18 · 2026-11-03 21:55';
+const APP_VER = '1.19 · 2026-11-03 22:02';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -281,36 +282,36 @@ const cfg = Object.assign({
 const $ = (id) => document.getElementById(id);
 const feed = $('feed');
 
-// iOS 键盘：visualViewport 变化时同步真实高度，避免键盘收起后留白、内容“卡在半空”
-function syncAppHeight(){
+// iOS 键盘：不改页面高度（那会让系统滚动整页），只把底栏上抬键盘高度，正文区补底部留白
+function syncKeyboard(){
   const vv = window.visualViewport;
-  const h = vv ? vv.height : window.innerHeight;
-  document.documentElement.style.setProperty('--app-h', Math.round(h) + 'px');
+  if (!vv) return;
+  const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+  document.documentElement.style.setProperty('--kb', kb + 'px');
+  if (kb > 0) feed.scrollTop = feed.scrollHeight;
 }
 let vpRaf = null;
 function onViewportChange(){
   if (vpRaf) return;
   vpRaf = requestAnimationFrame(() => {
     vpRaf = null;
-    syncAppHeight();
-    feed.scrollTop = feed.scrollHeight;
+    syncKeyboard();
   });
 }
-syncAppHeight();
+syncKeyboard();
 if (window.visualViewport){
   window.visualViewport.addEventListener('resize', onViewportChange);
   window.visualViewport.addEventListener('scroll', onViewportChange);
 }
 window.addEventListener('orientationchange', onViewportChange);
-window.addEventListener('resize', onViewportChange);
 
-// 聚焦/失焦后的一段时间内，重复校正高度（iOS 键盘动画期间 vv 事件可能延迟或不触发）
+// 聚焦/失焦后的一段时间内重复校正（iOS 键盘动画期间 vv 事件可能延迟或不触发）
 let vpWatch = null;
 function watchViewport(ms = 1500){
   if (vpWatch) clearInterval(vpWatch);
   const t0 = Date.now();
   vpWatch = setInterval(() => {
-    syncAppHeight();
+    syncKeyboard();
     if (Date.now() - t0 > ms){ clearInterval(vpWatch); vpWatch = null; }
   }, 100);
 }
@@ -353,6 +354,7 @@ function newChat(){
 }
 function openChat(id){
   curId = id;
+  cfg.lastChatId = id; saveCfg();
   const c = chats.find((x) => x.id === id);
   draft = c ? c.msgs.slice() : [];
   feed.innerHTML = '';
@@ -1027,17 +1029,13 @@ $('send').onclick = send;
 $('input').addEventListener('keydown', (e)=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
 $('input').addEventListener('input', (e)=>{ e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'; });
 $('input').addEventListener('focus', ()=>{
-  watchViewport(1600);
-  setTimeout(()=>{
-    syncAppHeight();
-    feed.scrollTop = feed.scrollHeight;
-  }, 280);
+  watchViewport(1800);
+  setTimeout(syncKeyboard, 260);
 });
 $('input').addEventListener('blur', ()=>{
   watchViewport(1200);
-  setTimeout(syncAppHeight, 120);
-  setTimeout(syncAppHeight, 400);
-  setTimeout(()=>{ window.scrollTo(0, 0); syncAppHeight(); }, 60);
+  setTimeout(syncKeyboard, 120);
+  setTimeout(syncKeyboard, 420);
 });
 
 $('btnMenu').onclick = ()=>{ renderChatList(); $('drawer').classList.add('open'); };
@@ -1213,7 +1211,8 @@ $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新�
   $('verShort').textContent = APP_SHORT;
   // 等渲染库就绪再铺历史消息：脚本是 defer，可能在首帧之后才可用
   await whenLibs(2500);
-  if (chats.length) openChat(chats[0].id); else newChat();
+  const startId = (cfg.lastChatId && chats.some((c) => c.id === cfg.lastChatId)) ? cfg.lastChatId : (chats[0] && chats[0].id);
+  if (startId) openChat(startId); else newChat();
   rerenderAll();
   setTimeout(showRenderBanner, 600);
   if (!cfg.repo || !cfg.pat){ setStatus('', '未配置记忆'); return; }
