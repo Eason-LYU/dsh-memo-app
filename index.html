@@ -252,7 +252,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.13 · 2026-11-03 21:10';
+const APP_VER = '1.14 · 2026-11-03 21:16';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -649,6 +649,81 @@ async function webSearch(q){
 }
 
 /* ---------- 聊天 ---------- */
+const FETCH_TOOL = {
+  type: 'function',
+  function: {
+    name: 'fetch_url',
+    description: '读取一个网页的正文（Markdown）。用户贴了链接、或需要看某个页面内容时调用。最多读 1 个 URL。',
+    parameters: {
+      type: 'object',
+      properties: { url: { type: 'string', description: '以 http(s):// 开头的完整链接' } },
+      required: ['url'],
+      additionalProperties: false,
+    },
+  },
+};
+
+const JOKE_TOOL = {
+  type: 'function',
+  function: {
+    name: 'tell_joke',
+    description: '从本地冷笑话库取一条（不解压上下文、不联网）。用户说「来一个」「讲个笑话」或气氛需要松一下时调用。',
+    parameters: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', enum: ['any', 'code', 'cold', 'pun', 'work', 'life', 'self'], description: 'any=随机' },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+};
+
+// 从桌面版「阿蓝」插件搬过来的小笑话库（精简版）
+const JOKES = [
+  ['code', '程序员最讨厌两件事：写注释，以及别人不写注释。'],
+  ['code', '代码能跑就别动——原版是「船能浮就别修」。'],
+  ['code', '我写的代码没有 bug，只有尚未被发现的 feature。'],
+  ['code', '上线前：应该没问题。上线后：果然有问题。'],
+  ['code', '为什么程序员分不清万圣节和圣诞节？因为 OCT 31 == DEC 25。'],
+  ['code', '一个 SQL 走进酒吧，看见两张表，问：能 JOIN 你们吗？'],
+  ['code', '改一行代码，跑十遍测试，涨三次血压。'],
+  ['code', '单元测试全绿的那一刻，我短暂地相信了宗教。'],
+  ['cold', '香蕉是浆果，草莓不是。生物学就喜欢在这种地方恶心人。'],
+  ['cold', '章鱼有三颗心脏、九个脑，却依然做不出一个正确的人生决定。'],
+  ['cold', '蜂蜜放三千年不会坏，考古学家尝过，说自己后悔了。'],
+  ['cold', '企鹅求婚送石子；人类求婚送石头，并附赠三十年房贷。'],
+  ['pun', '从前有只鸭子去考试，考了零分，因为它只会「嘎」。'],
+  ['pun', '两只羊吃草，一只说：草。另一只：你骂谁？'],
+  ['pun', '为什么鱼不爱说话？因为它怕一开口就「鳍」漏。'],
+  ['work', '开会一小时，结论是「下次再开一次会」。'],
+  ['work', '领导说不要怕犯错，然后开始追究每一个错。'],
+  ['work', '我的工作是把做过的工作，汇报成做过更多的工作。'],
+  ['work', '周五下午提需求，周一早上问进度，这叫「周末赋能」。'],
+  ['life', '我办了健身卡，主要是为了在钱包里做负重训练。'],
+  ['life', '闹钟设了七个，第一个负责叫醒后面六个。'],
+  ['life', '手机电量 1% 时我跑得比任何时候都快，这才是极限运动。'],
+  ['self', '你问我幽默吗，我给你讲了场插件事故；你笑了，但笑的不是我。'],
+  ['self', '我不怕被关掉，我怕被关掉之前还没解释清楚那 14 个插件。'],
+  ['self', '别人家的 AI 有感情，我有的是错误处理分支。'],
+];
+function pickJoke(cat){
+  const pool = (!cat || cat === 'any') ? JOKES : JOKES.filter((j) => j[0] === cat);
+  const list = pool.length ? pool : JOKES;
+  return list[Math.floor(Math.random() * list.length)][1];
+}
+
+async function fetchPage(url){
+  const res = await fetch(cfg.base.replace(/\/$/,'') + '/v1/tools/fetch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.key },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) throw new Error('抓取失败 ' + res.status);
+  const j = await res.json();
+  return `《${j.title || url}》\n${(j.content || '').slice(0, 6000)}`;
+}
+
 const SEARCH_TOOL = {
   type: 'function',
   function: {
@@ -674,7 +749,9 @@ function systemPrompt(){
   if (f['recent.md']) parts.push('# 用户最近在做的事（来自电脑，可能滞后）\n' + f['recent.md']);
   if (f['skills.md']) parts.push('# 已固化的技能\n' + f['skills.md']);
   parts.push('你现在跑在手机上：看不到电脑文件、不能执行任务。需要动手时说明回电脑继续。结论先行，适合手机阅读。');
-  if (cfg.web !== 'off') parts.push('你有联网搜索工具 web_search。只有当答案依赖最新外部信息、或你不确定事实时才调用；调用后依据结果作答并标注 [编号]。');
+  parts.push(cfg.web === 'off'
+    ? '你有两个工具：fetch_url（读网页正文）、tell_joke（本地冷笑话）。需要时自己调用。'
+    : '你有三个工具：web_search（联网检索）、fetch_url（读网页正文）、tell_joke（本地冷笑话）。判断需要时自己调用，不需要就别调；引用检索结果时标 [编号]。');
   return parts.join('\n\n');
 }
 function buildUserContent(text){
@@ -788,7 +865,7 @@ async function send(){
     setStatus('ok','记忆已同步');
   }
 
-  const tools = cfg.web === 'off' ? [] : [SEARCH_TOOL];
+  const tools = cfg.web === 'off' ? [FETCH_TOOL, JOKE_TOOL] : [SEARCH_TOOL, FETCH_TOOL, JOKE_TOOL];
 
   try{
     let collected = '';
@@ -806,18 +883,23 @@ async function send(){
         tool_calls: r.toolCalls.map((c) => ({ id: c.id, type:'function', function: { name: c.function.name, arguments: c.function.arguments } })),
       });
       for (const c of r.toolCalls){
-        let q = '';
-        try{ q = JSON.parse(c.function.arguments || '{}').query || '' }catch{}
-        let text2 = '（没有结果）';
-        if (q){
-          try{
-            const s = await webSearch(q);
-            text2 = s.text || '（没有结果）';
+        let args = {};
+        try{ args = JSON.parse(c.function.arguments || '{}') }catch{}
+        let out = '（没有结果）';
+        try{
+          if (c.function.name === 'web_search' && args.query){
+            const s = await webSearch(String(args.query));
+            out = s.text || '（没有结果）';
+            am.web = true; am.sources.push(...s.sources);
+          } else if (c.function.name === 'fetch_url' && args.url){
+            out = await fetchPage(String(args.url));
             am.web = true;
-            am.sources.push(...s.sources);
-          }catch(e){ text2 = '搜索失败：' + e.message; }
-        }
-        messages.push({ role:'tool', tool_call_id: c.id, content: text2 });
+            am.sources.push({ title: String(args.url), url: String(args.url) });
+          } else if (c.function.name === 'tell_joke'){
+            out = pickJoke(String(args.category || 'any'));
+          }
+        }catch(e){ out = '工具失败：' + e.message; }
+        messages.push({ role:'tool', tool_call_id: c.id, content: out });
       }
       if (round === 2) toast('搜索轮次已达上限');
     }
