@@ -252,7 +252,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.15 · 2026-11-03 21:22';
+const APP_VER = '1.16 · 2026-11-03 21:33';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -302,6 +302,17 @@ if (window.visualViewport){
 }
 window.addEventListener('orientationchange', onViewportChange);
 window.addEventListener('resize', onViewportChange);
+
+// 聚焦/失焦后的一段时间内，重复校正高度（iOS 键盘动画期间 vv 事件可能延迟或不触发）
+let vpWatch = null;
+function watchViewport(ms = 1500){
+  if (vpWatch) clearInterval(vpWatch);
+  const t0 = Date.now();
+  vpWatch = setInterval(() => {
+    syncAppHeight();
+    if (Date.now() - t0 > ms){ clearInterval(vpWatch); vpWatch = null; }
+  }, 100);
+}
 let pack = { files:{}, at:null };
 let chats = loadChats();
 let curId = null;
@@ -932,8 +943,20 @@ async function send(){
 $('send').onclick = send;
 $('input').addEventListener('keydown', (e)=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
 $('input').addEventListener('input', (e)=>{ e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'; });
-$('input').addEventListener('focus', ()=>{ setTimeout(()=>{ syncAppHeight(); feed.scrollTop = feed.scrollHeight; }, 300); });
-$('input').addEventListener('blur', ()=>{ setTimeout(onViewportChange, 120); });
+$('input').addEventListener('focus', ()=>{
+  watchViewport(1600);
+  setTimeout(()=>{
+    syncAppHeight();
+    feed.scrollTop = feed.scrollHeight;
+    try{ $('input').scrollIntoView({ block:'nearest' }); }catch{}
+  }, 280);
+});
+$('input').addEventListener('blur', ()=>{
+  watchViewport(1200);
+  setTimeout(syncAppHeight, 120);
+  setTimeout(syncAppHeight, 400);
+  setTimeout(()=>{ window.scrollTo(0, 0); syncAppHeight(); }, 60);
+});
 
 $('btnMenu').onclick = ()=>{ renderChatList(); $('drawer').classList.add('open'); };
 $('drawerMask').onclick = ()=> $('drawer').classList.remove('open');
