@@ -78,6 +78,15 @@
   .bubble a{color:#2563eb;text-decoration:none;word-break:break-all}
   .bubble img{max-width:100%;border-radius:8px}
   .sticker{width:150px;height:150px;object-fit:contain;margin-top:8px;border-radius:12px;display:block;background:transparent}
+  #jumpBar{position:fixed;left:0;right:0;z-index:19;display:none;
+    background:color-mix(in srgb,var(--bg) 96%,transparent);border-bottom:1px solid var(--line);
+    font-size:13px;color:var(--muted)}
+  #jumpBar button{flex:1;background:none;border:0;padding:8px 6px;font:inherit;color:inherit}
+  #toBottom{position:fixed;right:12px;z-index:25;width:40px;height:40px;border-radius:50%;
+    border:1px solid var(--line);background:var(--bg);color:var(--text);display:none;
+    align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 16px #0002;
+    bottom:calc(env(safe-area-inset-bottom,0px) + 96px + var(--kb,0px))}
+  #toBottom.show{display:flex}
   .katex{font-size:1.02em}
   .katex-display{overflow-x:auto;overflow-y:hidden;padding:2px 0;max-width:100%}
   .meta{display:flex;gap:8px;align-items:center;margin-top:5px;font-size:11px;color:var(--dim-2);flex-wrap:wrap}
@@ -163,6 +172,8 @@
   <button class="iconbtn" id="btnMemo">记忆</button>
   <button class="iconbtn" id="btnSet">设置</button>
 </header>
+<div id="jumpBar"><button id="jumpTop">↑ 跳到顶部</button><button id="jumpPrev">↑ 定位到上一条消息</button></div>
+<button id="toBottom" aria-label="回到最新">↓</button>
 <main id="feed">
   <div class="hint" id="hint">
     <b>白色版 · 自动挡</b><br />
@@ -254,7 +265,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.24 · 2026-11-03 22:42';
+const APP_VER = '1.25 · 2026-11-03 22:34';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1047,6 +1058,26 @@ $('input').addEventListener('blur', ()=>{
   setTimeout(syncKeyboard, 120);
   setTimeout(syncKeyboard, 420);
 });
+
+// 向上翻看时：顶部出现「跳到顶部 / 上一条消息」，右下角出现「回到最新」
+function onFeedScroll(){
+  const gap = feed.scrollHeight - feed.scrollTop - feed.clientHeight;
+  const show = gap > 240;
+  $('toBottom').classList.toggle('show', show);
+  const bar = $('jumpBar');
+  bar.style.display = show ? 'flex' : 'none';
+  const hd = document.querySelector('header');
+  if (hd) bar.style.top = Math.round(hd.getBoundingClientRect().bottom) + 'px';
+}
+feed.addEventListener('scroll', onFeedScroll, { passive: true });
+$('toBottom').onclick = ()=> feed.scrollTo({ top: feed.scrollHeight, behavior:'smooth' });
+$('jumpTop').onclick = ()=> feed.scrollTo({ top: 0, behavior:'smooth' });
+$('jumpPrev').onclick = ()=>{
+  const rows = Array.from(feed.querySelectorAll('.row-msg.user')).reverse();
+  const top = feed.scrollTop;
+  const prev = rows.find((r) => r.offsetTop < top - 40);
+  (prev || rows[rows.length - 1] || { scrollIntoView(){} }).scrollIntoView({ block:'start', behavior:'smooth' });
+};
 
 $('btnMenu').onclick = ()=>{ renderChatList(); $('drawer').classList.add('open'); };
 $('drawerMask').onclick = ()=> $('drawer').classList.remove('open');
