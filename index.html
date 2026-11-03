@@ -9,6 +9,11 @@
 <meta name="apple-mobile-web-app-title" content="阿蓝" />
 <link rel="manifest" href="./manifest.webmanifest" />
 <link rel="apple-touch-icon" href="./icon.svg" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+<script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 <title>阿蓝</title>
 <style>
   :root{
@@ -55,6 +60,21 @@
   .bubble{padding:10px 13px;border-radius:16px;white-space:pre-wrap;word-break:break-word;
     background:var(--bubble-ai);color:var(--text);border-bottom-left-radius:5px}
   .row-msg.user .bubble{background:var(--bubble-user);color:var(--accent-ink);border-bottom-left-radius:16px;border-bottom-right-radius:5px}
+  .bubble p{margin:0 0 8px}
+  .bubble p:last-child{margin-bottom:0}
+  .bubble h1,.bubble h2,.bubble h3{font-size:15px;margin:10px 0 6px}
+  .bubble ul,.bubble ol{margin:0 0 8px;padding-left:20px}
+  .bubble li{margin:2px 0}
+  .bubble code{background:rgba(127,127,127,.16);padding:1px 4px;border-radius:4px;font-size:13.5px}
+  .bubble pre{background:rgba(127,127,127,.13);padding:9px;border-radius:8px;overflow:auto;font-size:13px}
+  .bubble pre code{background:none;padding:0}
+  .bubble blockquote{margin:6px 0;padding-left:10px;border-left:3px solid var(--line);color:var(--dim)}
+  .bubble table{border-collapse:collapse;margin:6px 0;font-size:13.5px}
+  .bubble th,.bubble td{border:1px solid var(--line);padding:4px 7px}
+  .bubble a{color:#2563eb;text-decoration:none}
+  .bubble img{max-width:100%;border-radius:8px}
+  .katex{font-size:1.02em}
+  .katex-display{overflow-x:auto;overflow-y:hidden;padding:2px 0}
   .meta{display:flex;gap:8px;align-items:center;margin-top:5px;font-size:11px;color:var(--dim-2);flex-wrap:wrap}
   .row-msg.user .meta{justify-content:flex-end}
   .chip{border:1px solid var(--line);border-radius:7px;padding:2px 7px;background:transparent;color:var(--dim);font-size:11px}
@@ -424,6 +444,39 @@ function el(tag, cls, text){
   if (text !== undefined) e.textContent = text;
   return e;
 }
+
+// Markdown + LaTeX 渲染（依赖 CDN 的 marked / DOMPurify / KaTeX，失败时退回纯文本）
+const MD_DELIMS = [
+  { left:'$$', right:'$$', display:true },
+  { left:'\\[', right:'\\]', display:true },
+  { left:'$', right:'$', display:false },
+  { left:'\\(', right:'\\)', display:false },
+];
+function renderRich(node, text){
+  if (!text){ node.textContent = ''; return; }
+  if (!(window.marked && window.DOMPurify)){ node.textContent = text; return; }
+  try{
+    const html = window.marked.parse(text, { breaks:true, gfm:true });
+    node.innerHTML = window.DOMPurify.sanitize(html, { ADD_ATTR: ['target','rel'] });
+    if (window.renderMathInElement){
+      window.renderMathInElement(node, {
+        delimiters: MD_DELIMS,
+        throwOnError: false,
+        ignoredTags: ['script','noscript','style','textarea','pre','code'],
+      });
+    }
+  }catch(e){ node.textContent = text; }
+}
+let renderTimer = null, renderTarget = null, renderText = '';
+function scheduleRender(node, text){
+  renderTarget = node; renderText = text;
+  if (renderTimer) return;
+  renderTimer = setTimeout(() => {
+    renderTimer = null;
+    renderRich(renderTarget, renderText);
+    feed.scrollTop = feed.scrollHeight;
+  }, 140);
+}
 function addMessage(m){
   const row = el('div', 'row-msg ' + (m.role === 'user' ? 'user' : 'ai'));
   row.appendChild(el('div', 'avatar', m.role === 'user' ? '我' : '鱼'));
@@ -434,7 +487,11 @@ function addMessage(m){
     det.appendChild(el('div', '', m.reasoning));
     col.appendChild(det);
   }
-  const bubble = el('div', 'bubble', m.content || '');
+  const bubble = el('div', 'bubble');
+  if (m.content){
+    if (m.role === 'user') bubble.textContent = m.content;
+    else renderRich(bubble, m.content);
+  }
   col.appendChild(bubble);
   const meta = el('div', 'meta');
   meta.appendChild(el('span', '', new Date(m.at || Date.now()).toTimeString().slice(0,5)));
@@ -615,7 +672,7 @@ async function send(){
   };
   const ui = {
     onReason(t){ am.reasoning = t; ensureReason(); reasonDiv.textContent = t; feed.scrollTop = feed.scrollHeight; },
-    onContent(t){ am.content = t; body.textContent = t; feed.scrollTop = feed.scrollHeight; },
+    onContent(t){ am.content = t; scheduleRender(body, t); },
   };
 
   const prior = draft.slice(0, -1).slice(-18);
@@ -673,7 +730,7 @@ async function send(){
     }
 
     am.content = collected || '（空回复）';
-    body.textContent = am.content;
+    renderRich(body, am.content);
     if (am.sources.length){
       const box = el('div','srcs');
       for (const s of am.sources){
