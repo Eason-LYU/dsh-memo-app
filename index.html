@@ -163,8 +163,6 @@
   <button class="iconbtn" id="btnMemo">记忆</button>
   <button class="iconbtn" id="btnSet">设置</button>
 </header>
-
-<div id="dbg" style="position:fixed;left:6px;top:calc(env(safe-area-inset-top,0px) + 56px);z-index:80;font:10px/1.3 ui-monospace,monospace;color:#8a8a8a;background:#fff8;padding:1px 4px;border-radius:4px;pointer-events:none"></div>
 <main id="feed">
   <div class="hint" id="hint">
     <b>白色版 · 自动挡</b><br />
@@ -256,7 +254,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.23 · 2026-11-03 22:36';
+const APP_VER = '1.24 · 2026-11-03 22:42';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -297,8 +295,6 @@ function syncKeyboard(){
   document.documentElement.style.setProperty('--kb', kb + 'px');
   if (window.scrollY) window.scrollTo(0, 0);
   if (kb > 0) feed.scrollTop = feed.scrollHeight;
-  const dbg = document.getElementById('dbg');
-  if (dbg) dbg.textContent = `ih=${Math.round(window.innerHeight)} ch=${layoutH} vv=${Math.round(vv.height)} off=${Math.round(vv.offsetTop)} kb=${kb} sy=${Math.round(window.scrollY)}`;
 }
 let vpRaf = null;
 function onViewportChange(){
