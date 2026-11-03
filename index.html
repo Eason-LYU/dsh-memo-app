@@ -266,7 +266,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.27.4 · 2026-11-04 00:38';
+const APP_VER = '1.27.5 · 2026-11-04 00:44';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -585,7 +585,42 @@ function renderRich(node, text){
       span.textContent = '\\(' + t.replace(/(^|[^\\])%/g, '$1\\%') + '\\)';
       c.replaceWith(span);
     });
-    if (window.renderMathInElement){
+    // 自己做数学渲染：逐文本节点找四种定界符并直接调用 katex.render，
+    // 这样 % 的转义一定发生在渲染前，不再依赖 renderMathInElement 的内部行为。
+    if (window.katex){
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {
+        acceptNode(n){
+          const p = n.parentElement;
+          if (!p) return NodeFilter.FILTER_REJECT;
+          if (p.closest('pre,code,.katex')) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        },
+      });
+      const texts = [];
+      while (walker.nextNode()) texts.push(walker.currentNode);
+      const re = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$|\\\(([\s\S]+?)\\\)|\\\[([\s\S]+?)\\\]/g;
+      for (const n of texts){
+        const txt = n.nodeValue || '';
+        if (!txt || (txt.indexOf('$') < 0 && txt.indexOf('\\(') < 0 && txt.indexOf('\\[') < 0)) continue;
+        re.lastIndex = 0;
+        let m, last = 0, hit = false;
+        const frag = document.createDocumentFragment();
+        while ((m = re.exec(txt))){
+          hit = true;
+          if (m.index > last) frag.appendChild(document.createTextNode(txt.slice(last, m.index)));
+          const body = (m[1] ?? m[2] ?? m[3] ?? m[4] ?? '').replace(/(^|[^\\])%/g, '$1\\%');
+          const display = m[1] != null || m[3] != null;
+          const span = document.createElement('span');
+          try{ window.katex.render(body, span, { displayMode: !!display, throwOnError: false }); }
+          catch{ span.textContent = m[0]; }
+          frag.appendChild(span);
+          last = re.lastIndex;
+        }
+        if (!hit) continue;
+        if (last < txt.length) frag.appendChild(document.createTextNode(txt.slice(last)));
+        n.parentNode.replaceChild(frag, n);
+      }
+    } else if (window.renderMathInElement){
       window.renderMathInElement(node, {
         delimiters: MD_DELIMS,
         throwOnError: false,
