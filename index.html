@@ -265,7 +265,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.25 · 2026-11-03 22:34';
+const APP_VER = '1.26 · 2026-11-03 23:05';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -559,6 +559,16 @@ function renderRich(node, text){
     const html = window.marked.parse(text, { breaks:true, gfm:true });
     node.innerHTML = window.DOMPurify.sanitize(html, { ADD_ATTR: ['target','rel'] });
     node.classList.add('rendered');
+    // 模型有时把 LaTeX 包进反引号（行内代码），会被 KaTeX 的 ignoredTags 跳过而显示源码。
+    // 这里把「看起来像公式」的行内 code 还原成 \( ... \)，让它们也能渲染。
+    node.querySelectorAll('code').forEach((c) => {
+      if (c.closest('pre')) return;
+      const t = (c.textContent || '').trim();
+      if (!/\\[a-zA-Z]{2,}|[_^]\{|\\frac|\\sqrt/.test(t)) return;
+      const span = document.createElement('span');
+      span.textContent = '\\(' + t + '\\)';
+      c.replaceWith(span);
+    });
     if (window.renderMathInElement){
       window.renderMathInElement(node, {
         delimiters: MD_DELIMS,
@@ -832,6 +842,7 @@ function systemPrompt(){
     : '你有三个工具：web_search（联网检索）、fetch_url（读网页正文）、tell_joke（本地冷笑话）。判断需要时自己调用，不需要就别调；引用检索结果时标 [编号]。');
   parts.push('如果用户发来 PDF，正文里会带【pN】页码标记；回答时按页码定位并标明出处（如“p7”），需要跨页串联就说明范围。');
   parts.push('你可以用 send_sticker 发「大肥鱼」表情包（你自己就是那条鲸鱼娘）。聊天轻松、用户情绪明显、或用户要表情包时用；一条回复最多一张；严肃答题不发。');
+  parts.push('数学公式直接写 $...$（行内）或 $$...$$（独立成行），不要用反引号包公式——反引号会被当成代码原样显示。');
   return parts.join('\n\n');
 }
 function buildUserContent(text){
