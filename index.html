@@ -76,6 +76,7 @@
   .bubble th,.bubble td{border:1px solid var(--line);padding:4px 7px}
   .bubble a{color:#2563eb;text-decoration:none;word-break:break-all}
   .bubble img{max-width:100%;border-radius:8px}
+  .sticker{width:150px;height:150px;object-fit:contain;margin-top:8px;border-radius:12px;display:block;background:transparent}
   .katex{font-size:1.02em}
   .katex-display{overflow-x:auto;overflow-y:hidden;padding:2px 0;max-width:100%}
   .meta{display:flex;gap:8px;align-items:center;margin-top:5px;font-size:11px;color:var(--dim-2);flex-wrap:wrap}
@@ -252,7 +253,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.17 · 2026-11-03 21:42';
+const APP_VER = '1.18 · 2026-11-03 21:55';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -575,6 +576,11 @@ function addMessage(m){
     else renderRich(bubble, m.content);
   }
   col.appendChild(bubble);
+  if (m.sticker){
+    const im = el('img', 'sticker');
+    im.src = m.sticker.thumb; im.alt = m.sticker.name || 'sticker';
+    col.appendChild(im);
+  }
   const meta = el('div', 'meta');
   meta.appendChild(el('span', '', new Date(m.at || Date.now()).toTimeString().slice(0,5)));
   if (m.web) meta.appendChild(el('span', '', '联网'));
@@ -739,6 +745,39 @@ async function fetchPage(url){
   return `《${j.title || url}》\n${(j.content || '').slice(0, 6000)}`;
 }
 
+const STICKER_TOOL = {
+  type: 'function',
+  function: {
+    name: 'send_sticker',
+    description: '发一张「大肥鱼」表情包（322 张，按情绪/场景挑）。聊天轻松、用户情绪明显、或用户要表情包时调用；严肃答题时不要用。一次回复最多一张。',
+    parameters: {
+      type: 'object',
+      properties: { mood: { type: 'string', description: '中文情绪或场景词，如 摸鱼、被夸、下班、无语、开心' } },
+      required: ['mood'],
+      additionalProperties: false,
+    },
+  },
+};
+let STICKERS = [];
+async function loadStickers(){
+  if (STICKERS.length) return;
+  try{
+    const r = await fetch('./stickers.json', { cache: 'force-cache' });
+    if (r.ok) STICKERS = await r.json();
+  }catch{}
+}
+function pickSticker(mood){
+  if (!STICKERS.length) return null;
+  const q = String(mood || '').trim();
+  if (!q) return STICKERS[Math.floor(Math.random() * STICKERS.length)];
+  const hits = STICKERS.filter((s) =>
+    s.name.includes(q) || (s.emotion || '').includes(q) || q.includes(s.emotion || '') ||
+    (s.tags || []).some((t) => t.includes(q) || q.includes(t))
+  );
+  const pool = hits.length ? hits : STICKERS;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 const SEARCH_TOOL = {
   type: 'function',
   function: {
@@ -769,6 +808,7 @@ function systemPrompt(){
     ? '你有两个工具：fetch_url（读网页正文）、tell_joke（本地冷笑话）。需要时自己调用。'
     : '你有三个工具：web_search（联网检索）、fetch_url（读网页正文）、tell_joke（本地冷笑话）。判断需要时自己调用，不需要就别调；引用检索结果时标 [编号]。');
   parts.push('如果用户发来 PDF，正文里会带【pN】页码标记；回答时按页码定位并标明出处（如“p7”），需要跨页串联就说明范围。');
+  parts.push('你可以用 send_sticker 发「大肥鱼」表情包（你自己就是那条鲸鱼娘）。聊天轻松、用户情绪明显、或用户要表情包时用；一条回复最多一张；严肃答题不发。');
   return parts.join('\n\n');
 }
 function buildUserContent(text){
@@ -911,7 +951,7 @@ async function send(){
     setStatus('ok','记忆已同步');
   }
 
-  const tools = cfg.web === 'off' ? [FETCH_TOOL, JOKE_TOOL] : [SEARCH_TOOL, FETCH_TOOL, JOKE_TOOL];
+  const tools = cfg.web === 'off' ? [FETCH_TOOL, JOKE_TOOL, STICKER_TOOL] : [SEARCH_TOOL, FETCH_TOOL, JOKE_TOOL, STICKER_TOOL];
 
   try{
     let collected = '';
@@ -943,6 +983,10 @@ async function send(){
             am.sources.push({ title: String(args.url), url: String(args.url) });
           } else if (c.function.name === 'tell_joke'){
             out = pickJoke(String(args.category || 'any'));
+          } else if (c.function.name === 'send_sticker'){
+            const s = pickSticker(String(args.mood || ''));
+            if (s){ am.sticker = s; out = `已发一张表情：${s.name}（${s.emotion}）`; }
+            else out = '（表情库未加载）';
           }
         }catch(e){ out = '工具失败：' + e.message; }
         messages.push({ role:'tool', tool_call_id: c.id, content: out });
@@ -952,6 +996,11 @@ async function send(){
 
     am.content = collected || '（空回复）';
     renderRich(body, am.content);
+    if (am.sticker){
+      const im = el('img', 'sticker');
+      im.src = am.sticker.thumb; im.alt = am.sticker.name || 'sticker';
+      node.row.querySelector('.col').appendChild(im);
+    }
     feed.scrollTop = feed.scrollHeight;
     if (am.sources.length){
       const box = el('div','srcs');
@@ -962,7 +1011,7 @@ async function send(){
       }
       node.row.querySelector('.col').appendChild(box);
     }
-    draft.push({ role:'assistant', content: am.content, reasoning: am.reasoning, web: am.web, sources: am.sources });
+    draft.push({ role:'assistant', content: am.content, reasoning: am.reasoning, web: am.web, sources: am.sources, sticker: am.sticker });
     persistCurrent();
     autoNote(text, am.content, am);
   }catch(e){
@@ -1160,6 +1209,7 @@ $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新�
 (async function boot(){
   if ('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
   syncTools(); renderMemo();
+  loadStickers();
   $('verShort').textContent = APP_SHORT;
   // 等渲染库就绪再铺历史消息：脚本是 defer，可能在首帧之后才可用
   await whenLibs(2500);
