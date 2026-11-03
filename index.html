@@ -183,7 +183,7 @@
       <select id="cfgModel"><option value="deepseek-flash">deepseek-flash</option><option value="deepseek-v4-pro">deepseek-v4-pro</option></select>
     </div>
     <div class="row"><label>联网</label>
-      <select id="cfgWeb"><option value="auto">自动（按问题判断）</option><option value="on">总是联网</option><option value="off">从不联网</option></select>
+      <select id="cfgWeb"><option value="auto">自动（模型自己决定查不查）</option><option value="on">总是先查</option><option value="off">关闭联网</option></select>
     </div>
     <div class="row"><label>思考</label>
       <select id="cfgThink"><option value="auto">自动（服务端默认）</option><option value="on">总是思考</option><option value="off">关闭思考</option></select>
@@ -201,6 +201,8 @@
     <div class="row"><label>包目录</label><input id="cfgPrefix" placeholder="pack" /></div>
     <p class="note">Key 与 PAT 只存在这台手机的浏览器里。PAT 只需数据仓的 Contents 读写权限。</p>
     <button class="btn" id="saveCfg">保存并同步</button>
+    <button class="btn ghost" id="exportCfg">复制配置（换设备/换入口用）</button>
+    <button class="btn ghost" id="importCfg">粘贴配置</button>
     <button class="btn ghost" id="diagBtn">诊断</button>
     <pre id="diagOut" style="display:none;margin-top:10px"></pre>
     <button class="btn ghost" id="closeSet">关闭</button>
@@ -222,7 +224,22 @@
 
 <script>
 'use strict';
-const LS = 'dsh-memo-v3';
+// 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
+const LS = 'alan.cfg.v1';
+(function migrate(){
+  if (localStorage.getItem(LS)) return;
+  for (const old of ['dsh-memo-v3','dsh-memo-v2','dsh-memo-v1']){
+    const raw = localStorage.getItem(old);
+    if (!raw) continue;
+    try{
+      const j = JSON.parse(raw);
+      // 旧版本没有 web/think 字段时补默认值
+      j.web = j.web || 'auto'; j.think = j.think || 'auto'; j.effort = j.effort || 'high';
+      localStorage.setItem(LS, JSON.stringify(j));
+      return;
+    }catch{}
+  }
+})();
 const cfg = Object.assign({
   key:'', model:'deepseek-flash', theme:'light',
   base:'https://api.deepseek.com',
@@ -466,14 +483,6 @@ function readAsDataUrl(file){
   return new Promise((res, rej)=>{ const fr = new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); });
 }
 
-/* ---------- 自动挡判断 ---------- */
-const WEB_HINTS = /(今天|现在|最新|新闻|发布|上线|价格|多少钱|股价|汇率|天气|比分|比赛|谁是|当选|上映|更新|版本|今年|去年|昨天|刚刚|查一下|搜一下|帮我找|官网|链接)/;
-function shouldSearch(text){
-  if (cfg.web === 'on') return true;
-  if (cfg.web === 'off') return false;
-  return WEB_HINTS.test(text) || /[?？]$/.test(text.trim());
-}
-
 /* ---------- 联网 ---------- */
 async function webSearch(q){
   const res = await fetch(cfg.base.replace(/\/$/,'') + '/v1/tools/search', {
@@ -490,6 +499,22 @@ async function webSearch(q){
 }
 
 /* ---------- 聊天 ---------- */
+const SEARCH_TOOL = {
+  type: 'function',
+  function: {
+    name: 'web_search',
+    description: '联网搜索。只在需要时调用：用户问实时/外部事实（新闻、价格、天气、版本、人物近况、链接内容），或你不确定且答案会因时效而变。闲聊、推理、写作、代码、常识题不要调用。',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '搜索词，尽量具体，可带年份/站点' },
+      },
+      required: ['query'],
+      additionalProperties: false,
+    },
+  },
+};
+
 function systemPrompt(){
   const f = pack.files;
   const parts = ['你叫「阿蓝」，一条蓝色小鱼，是用户的 AI 助手。说话轻快、短句优先，正事优先，俏皮话放最后。'];
@@ -499,6 +524,7 @@ function systemPrompt(){
   if (f['recent.md']) parts.push('# 用户最近在做的事（来自电脑，可能滞后）\n' + f['recent.md']);
   if (f['skills.md']) parts.push('# 已固化的技能\n' + f['skills.md']);
   parts.push('你现在跑在手机上：看不到电脑文件、不能执行任务。需要动手时说明回电脑继续。结论先行，适合手机阅读。');
+  if (cfg.web !== 'off') parts.push('你有联网搜索工具 web_search。只有当答案依赖最新外部信息、或你不确定事实时才调用；调用后依据结果作答并标注 [编号]。');
   return parts.join('\n\n');
 }
 function buildUserContent(text){
@@ -509,6 +535,52 @@ function buildUserContent(text){
     else parts.push({ type:'file', file_data: a.dataUrl, filename: a.name });
   }
   return parts;
+}
+
+// 一次流式请求；返回累积内容、思考、工具调用
+async function streamChat(messages, tools, ui){
+  const payload = { model: cfg.model, stream: true, messages };
+  if (tools && tools.length) payload.tools = tools;
+  if (cfg.think === 'on'){ payload.thinking = { type:'enabled' }; payload.reasoning_effort = cfg.effort; }
+  else if (cfg.think === 'off'){ payload.thinking = { type:'disabled' }; }
+
+  const res = await fetch(cfg.base.replace(/\/$/,'') + '/chat/completions', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + cfg.key },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok){ const t = await res.text(); throw new Error('API ' + res.status + '：' + t.slice(0,180)); }
+
+  const reader = res.body.getReader(); const dec = new TextDecoder();
+  let buf = '', content = '', reasoning = '';
+  const calls = [];
+  while (true){
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream:true });
+    const parts = buf.split('\n\n'); buf = parts.pop();
+    for (const part of parts){
+      for (const line of part.split('\n')){
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (data === '[DONE]') continue;
+        let j; try{ j = JSON.parse(data) }catch{ continue }
+        const d = j.choices?.[0]?.delta || {};
+        if (d.reasoning_content){ reasoning += d.reasoning_content; ui.onReason(reasoning); }
+        if (d.content){ content += d.content; ui.onContent(content); }
+        if (Array.isArray(d.tool_calls)){
+          for (const tc of d.tool_calls){
+            const i = tc.index || 0;
+            calls[i] = calls[i] || { id:'', type:'function', function:{ name:'', arguments:'' } };
+            if (tc.id) calls[i].id = tc.id;
+            if (tc.function?.name) calls[i].function.name += tc.function.name;
+            if (tc.function?.arguments) calls[i].function.arguments += tc.function.arguments;
+          }
+        }
+      }
+    }
+  }
+  return { content, reasoning, toolCalls: calls.filter(Boolean) };
 }
 
 async function send(){
@@ -528,81 +600,90 @@ async function send(){
   persistCurrent();
 
   busy = true; $('send').disabled = true;
-  const useWeb = shouldSearch(text || '');
-  let searchNote = '', sources = [];
-  if (useWeb){
-    setStatus('warn','检索中…');
-    try{
-      const s = await webSearch(text || '最近新闻');
-      if (s.text){ searchNote = `以下是刚刚联网检索到的资料，回答优先依据它们并在合适处标注 [编号]：\n\n${s.text}`; sources = s.sources; }
-    }catch(e){ toast('联网失败：' + e.message, 3000); }
-    setStatus('ok', '记忆已同步');
-  }
 
-  const am = { role:'assistant', content:'', reasoning:'', at: Date.now(), web: useWeb && !!searchNote, sources };
+  const am = { role:'assistant', content:'', reasoning:'', at: Date.now(), web:false, sources:[] };
   const node = addMessage(am);
   const body = node.bubble;
+  let reasonDet = null, reasonDiv = null;
+  const ensureReason = () => {
+    if (reasonDet) return;
+    reasonDet = el('details','reason'); reasonDet.open = true;
+    reasonDet.appendChild(el('summary','','已深度思考'));
+    reasonDiv = el('div','','');
+    reasonDet.appendChild(reasonDiv);
+    node.row.querySelector('.col').insertBefore(reasonDet, body);
+  };
+  const ui = {
+    onReason(t){ am.reasoning = t; ensureReason(); reasonDiv.textContent = t; feed.scrollTop = feed.scrollHeight; },
+    onContent(t){ am.content = t; body.textContent = t; feed.scrollTop = feed.scrollHeight; },
+  };
 
   const prior = draft.slice(0, -1).slice(-18);
-  const payload = {
-    model: cfg.model,
-    stream: true,
-    messages: [
-      { role:'system', content: systemPrompt() },
-      ...(searchNote ? [{ role:'system', content: searchNote }] : []),
-      ...prior,
-      { role:'user', content: userContent },
-    ],
-  };
-  if (cfg.think === 'on'){ payload.thinking = { type:'enabled' }; payload.reasoning_effort = cfg.effort; }
-  else if (cfg.think === 'off'){ payload.thinking = { type:'disabled' }; }
-  // auto：不传 thinking / reasoning_effort，由服务端默认
+  let messages = [
+    { role:'system', content: systemPrompt() },
+    ...prior,
+    { role:'user', content: userContent },
+  ];
+
+  // 「总是联网」：先强制搜一次，把结果作为资料注入
+  if (cfg.web === 'on' && text){
+    setStatus('warn','检索中…');
+    try{
+      const s = await webSearch(text);
+      if (s.text){
+        messages.splice(1, 0, { role:'system', content: `参考资料（刚刚联网检索）：\n\n${s.text}` });
+        am.web = true; am.sources.push(...s.sources);
+      }
+    }catch(e){ toast('联网失败：' + e.message, 2600); }
+    setStatus('ok','记忆已同步');
+  }
+
+  const tools = cfg.web === 'off' ? [] : [SEARCH_TOOL];
 
   try{
-    const res = await fetch(cfg.base.replace(/\/$/,'') + '/chat/completions', {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + cfg.key },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok){ const t = await res.text(); throw new Error('API ' + res.status + '：' + t.slice(0,180)); }
-    const reader = res.body.getReader(); const dec = new TextDecoder();
-    let buf = '', out = '', reason = '';
-    let reasonDet = null, reasonDiv = null;
-    const ensureReason = () => {
-      if (reasonDet) return;
-      reasonDet = el('details', 'reason'); reasonDet.open = true;
-      reasonDet.appendChild(el('summary', '', '已深度思考'));
-      reasonDiv = el('div', '', '');
-      reasonDet.appendChild(reasonDiv);
-      node.row.querySelector('.col').insertBefore(reasonDet, body);
-    };
-    while (true){
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream:true });
-      const parts = buf.split('\n\n'); buf = parts.pop();
-      for (const part of parts){
-        for (const line of part.split('\n')){
-          if (!line.startsWith('data:')) continue;
-          const data = line.slice(5).trim();
-          if (data === '[DONE]') continue;
-          try{
-            const j = JSON.parse(data);
-            const d = j.choices?.[0]?.delta || {};
-            if (d.reasoning_content){
-              reason += d.reasoning_content;
-              am.reasoning = reason;
-              ensureReason(); reasonDiv.textContent = reason;
-              feed.scrollTop = feed.scrollHeight;
-            }
-            if (d.content){ out += d.content; body.textContent = out; feed.scrollTop = feed.scrollHeight; }
-          }catch{}
-        }
+    let collected = '';
+    for (let round = 0; round < 3; round++){
+      const r = await streamChat(messages, tools, ui);
+      collected += r.content;
+
+      if (!r.toolCalls.length){
+        break;
       }
+      // 模型要求搜索：执行后把结果回灌，再继续
+      messages.push({
+        role: 'assistant',
+        content: r.content || null,
+        tool_calls: r.toolCalls.map((c) => ({ id: c.id, type:'function', function: { name: c.function.name, arguments: c.function.arguments } })),
+      });
+      for (const c of r.toolCalls){
+        let q = '';
+        try{ q = JSON.parse(c.function.arguments || '{}').query || '' }catch{}
+        let text2 = '（没有结果）';
+        if (q){
+          try{
+            const s = await webSearch(q);
+            text2 = s.text || '（没有结果）';
+            am.web = true;
+            am.sources.push(...s.sources);
+          }catch(e){ text2 = '搜索失败：' + e.message; }
+        }
+        messages.push({ role:'tool', tool_call_id: c.id, content: text2 });
+      }
+      if (round === 2) toast('搜索轮次已达上限');
     }
-    am.content = out || '（空回复）';
+
+    am.content = collected || '（空回复）';
     body.textContent = am.content;
-    draft.push({ role:'assistant', content: am.content, reasoning: am.reasoning, web: am.web, sources });
+    if (am.sources.length){
+      const box = el('div','srcs');
+      for (const s of am.sources){
+        const a = el('a','', '· ' + (s.title || s.url));
+        a.href = s.url; a.target='_blank'; a.rel='noreferrer';
+        box.appendChild(a);
+      }
+      node.row.querySelector('.col').appendChild(box);
+    }
+    draft.push({ role:'assistant', content: am.content, reasoning: am.reasoning, web: am.web, sources: am.sources });
     persistCurrent();
   }catch(e){
     body.textContent = '出错了：' + e.message;
@@ -683,6 +764,22 @@ $('saveCfg').onclick = async ()=>{
   $('sheetSet').classList.remove('open'); toast('已保存');
   try{ await pullPack(); toast('记忆包已同步'); }
   catch(e){ setStatus('warn','同步失败'); toast(e.message, 5000); }
+};
+$('exportCfg').onclick = async ()=>{
+  const s = JSON.stringify(cfg);
+  try{ await navigator.clipboard.writeText(s); toast('配置已复制（含密钥，别乱发）'); }
+  catch{ window.prompt('手动复制这段：', s); }
+};
+$('importCfg').onclick = ()=>{
+  const s = window.prompt('粘贴之前复制的配置：');
+  if (!s) return;
+  try{
+    const j = JSON.parse(s);
+    Object.assign(cfg, j);
+    saveCfg(); fillSettings(); syncTools();
+    document.documentElement.dataset.theme = cfg.theme || 'light';
+    toast('已导入，记得点「保存并同步」');
+  }catch(e){ toast('格式不对'); }
 };
 $('diagBtn').onclick = async ()=>{
   const out = $('diagOut'); out.style.display='block'; out.textContent='检查中…';
