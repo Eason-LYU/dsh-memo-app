@@ -3,122 +3,174 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<meta name="theme-color" content="#0b1220" />
+<meta name="theme-color" content="#ffffff" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="阿蓝" />
 <link rel="manifest" href="./manifest.webmanifest" />
 <link rel="apple-touch-icon" href="./icon.svg" />
-<title>阿蓝 · 手机端</title>
+<title>阿蓝</title>
 <style>
   :root{
-    --bg:#0b1220; --panel:#121b2c; --panel-2:#18233a; --line:#243049;
-    --text:#e8eefc; --dim:#93a2bf; --accent:#4c8dff; --accent-2:#7bd3ff;
-    --ok:#2fd08a; --warn:#ffb020; --err:#ff5d6c;
+    --bg:#ffffff; --panel:#ffffff; --line:#e5e7eb; --line-2:#f1f3f5;
+    --text:#111827; --dim:#6b7280; --dim-2:#9ca3af;
+    --accent:#111827; --accent-ink:#ffffff;
+    --bubble-ai:#f4f5f7; --bubble-user:#111827;
+    --ok:#12a150; --warn:#b45309; --err:#dc2626;
     --safe-b:env(safe-area-inset-bottom,0px);
+  }
+  html[data-theme="dark"]{
+    --bg:#0f1115; --panel:#151821; --line:#262b36; --line-2:#1d222c;
+    --text:#f3f4f6; --dim:#9aa1ae; --dim-2:#6b7280;
+    --accent:#f3f4f6; --accent-ink:#0f1115;
+    --bubble-ai:#1c212b; --bubble-user:#f3f4f6;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
   body{
     margin:0;background:var(--bg);color:var(--text);
-    font:15px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
     display:flex;flex-direction:column;overscroll-behavior:none;
   }
   header{
     position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;
     padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 10px;
-    background:linear-gradient(180deg,#0b1220f2,#0b1220d9);backdrop-filter:blur(12px);
+    background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(14px);
     border-bottom:1px solid var(--line);
   }
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--dim);flex:0 0 auto}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--dim-2);flex:0 0 auto}
   .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.err{background:var(--err)}
-  .title{font-weight:600;letter-spacing:.3px}
+  .brand{font-weight:600;font-size:16px;letter-spacing:.2px}
   .sub{font-size:11.5px;color:var(--dim);margin-top:1px}
   .spacer{flex:1}
   .iconbtn{
     border:1px solid var(--line);background:var(--panel);color:var(--text);
-    border-radius:11px;padding:7px 11px;font-size:13px;line-height:1;
+    border-radius:10px;padding:7px 10px;font-size:13px;line-height:1;height:34px;
   }
   .iconbtn:active{transform:scale(.97)}
-  main{flex:1;overflow-y:auto;padding:14px 12px 8px;-webkit-overflow-scrolling:touch}
-  .msg{max-width:88%;margin:0 0 10px;padding:10px 12px;border-radius:14px;white-space:pre-wrap;word-break:break-word}
-  .user{margin-left:auto;background:#1d3a6b;border:1px solid #2a4d86;border-bottom-right-radius:5px}
-  .ai{background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:5px}
-  .ai .meta{display:flex;gap:8px;align-items:center;margin-top:6px;font-size:11px;color:var(--dim)}
-  .chip{border:1px solid var(--line);border-radius:7px;padding:2px 7px;background:#0f1727;color:var(--dim);font-size:11px}
-  .hint{color:var(--dim);font-size:13px;text-align:center;margin:24px 12px;line-height:1.7}
+  main{flex:1;overflow-y:auto;padding:16px 12px 10px;-webkit-overflow-scrolling:touch}
+  .row-msg{display:flex;gap:8px;margin:0 0 16px;align-items:flex-start}
+  .row-msg.user{flex-direction:row-reverse}
+  .avatar{
+    width:28px;height:28px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;
+    justify-content:center;font-size:15px;background:var(--bubble-ai);color:var(--dim);
+  }
+  .row-msg.user .avatar{background:#eef1f5;color:#374151}
+  html[data-theme="dark"] .row-msg.user .avatar{background:#2a3040;color:#d1d5db}
+  .col{max-width:82%;min-width:0}
+  .bubble{
+    padding:10px 13px;border-radius:16px;white-space:pre-wrap;word-break:break-word;
+    background:var(--bubble-ai);color:var(--text);border-bottom-left-radius:5px;
+  }
+  .row-msg.user .bubble{background:var(--bubble-user);color:var(--accent-ink);border-bottom-left-radius:16px;border-bottom-right-radius:5px}
+  .meta{display:flex;gap:8px;align-items:center;margin-top:5px;font-size:11px;color:var(--dim-2);flex-wrap:wrap}
+  .row-msg.user .meta{justify-content:flex-end}
+  .chip{border:1px solid var(--line);border-radius:7px;padding:2px 7px;background:transparent;color:var(--dim);font-size:11px}
+  .reason{
+    margin:0 0 8px;border:1px solid var(--line);border-radius:12px;background:transparent;
+    font-size:13px;color:var(--dim);overflow:hidden;
+  }
+  .reason summary{padding:8px 11px;cursor:pointer;list-style:none;color:var(--dim);font-size:12.5px}
+  .reason summary::-webkit-details-marker{display:none}
+  .reason div{padding:0 11px 10px;white-space:pre-wrap;line-height:1.65}
+  .srcs{margin-top:8px;display:flex;flex-direction:column;gap:5px}
+  .srcs a{font-size:12.5px;color:#2563eb;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hint{color:var(--dim);font-size:13.5px;text-align:center;margin:32px 16px;line-height:1.75}
+  .hint b{color:var(--text)}
   footer{
     position:sticky;bottom:0;z-index:20;padding:8px 10px calc(8px + var(--safe-b));
-    background:linear-gradient(0deg,#0b1220f7,#0b1220cc);backdrop-filter:blur(12px);
-    border-top:1px solid var(--line);display:flex;gap:8px;align-items:flex-end;
+    background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(14px);
+    border-top:1px solid var(--line);
   }
+  .tools{display:flex;gap:6px;align-items:center;margin-bottom:8px;overflow-x:auto;padding-bottom:2px}
+  .tool{
+    border:1px solid var(--line);background:var(--panel);color:var(--dim);
+    border-radius:9px;padding:5px 9px;font-size:12.5px;white-space:nowrap;height:30px;
+  }
+  .tool.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+  .composer{display:flex;gap:8px;align-items:flex-end}
   textarea{
-    flex:1;resize:none;max-height:132px;min-height:42px;padding:10px 12px;border-radius:12px;
+    flex:1;resize:none;max-height:140px;min-height:44px;padding:11px 13px;border-radius:13px;
     border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;outline:none;
   }
-  textarea:focus{border-color:#33518a}
+  textarea:focus{border-color:#c7ccd4}
   .send{
-    width:44px;height:44px;border-radius:12px;border:none;background:var(--accent);color:#04101f;
-    font-weight:700;font-size:18px;flex:0 0 auto;
+    width:46px;height:46px;border-radius:13px;border:none;background:var(--accent);color:var(--accent-ink);
+    font-weight:700;font-size:17px;flex:0 0 auto;
   }
-  .send:disabled{opacity:.45}
-  .sheet{
-    position:fixed;inset:0;z-index:50;display:none;background:#050a14cc;backdrop-filter:blur(3px);
-  }
+  .send:disabled{opacity:.4}
+  .attach-rail{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .thumb{position:relative;width:56px;height:56px;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+  .thumb img{width:100%;height:100%;object-fit:cover}
+  .thumb span{position:absolute;top:2px;right:4px;background:#0008;color:#fff;border-radius:50%;width:16px;height:16px;font-size:11px;line-height:16px;text-align:center}
+  .filechip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:10px;padding:6px 8px;font-size:12px;color:var(--dim)}
+  .sheet{position:fixed;inset:0;z-index:50;display:none;background:#00000030}
   .sheet.open{display:flex;align-items:flex-end}
   .sheetbox{
-    width:100%;max-height:88vh;overflow-y:auto;background:var(--panel);
+    width:100%;max-height:88vh;overflow-y:auto;background:var(--bg);
     border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:14px 14px calc(20px + var(--safe-b));
   }
   .sheetbox h3{margin:2px 0 12px;font-size:15px}
   .row{display:flex;gap:8px;align-items:center;margin:0 0 10px}
-  .row label{width:92px;color:var(--dim);font-size:13px;flex:0 0 auto}
+  .row label{width:88px;color:var(--dim);font-size:13px;flex:0 0 auto}
   input,select{
     flex:1;min-width:0;padding:9px 10px;border-radius:10px;border:1px solid var(--line);
-    background:var(--panel-2);color:var(--text);font:inherit;font-size:14px;outline:none;
+    background:var(--panel);color:var(--text);font:inherit;font-size:14px;outline:none;height:38px;
   }
   .tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px}
-  .tab{padding:6px 10px;border-radius:9px;border:1px solid var(--line);background:#0f1727;color:var(--dim);font-size:12.5px;white-space:nowrap}
-  .tab.on{background:#1d3a6b;color:#dfe9ff;border-color:#2a4d86}
-  pre{white-space:pre-wrap;word-break:break-word;background:#0d1526;border:1px solid var(--line);
-      border-radius:11px;padding:10px;font-size:12.5px;line-height:1.6;max-height:44vh;overflow:auto;color:#cfe0ff}
-  .btn{
-    width:100%;padding:11px;border-radius:11px;border:1px solid #2a4d86;background:#1d3a6b;
-    color:#e9f1ff;font:inherit;font-weight:600;margin-top:8px;
-  }
-  .btn.ghost{background:transparent;color:var(--dim);border-color:var(--line);font-weight:500}
+  .tab{padding:6px 10px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--dim);font-size:12.5px;white-space:nowrap}
+  .tab.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+  pre{white-space:pre-wrap;word-break:break-word;background:var(--bubble-ai);border-radius:11px;padding:10px;
+      font-size:12.5px;line-height:1.6;max-height:44vh;overflow:auto;color:var(--text)}
+  .btn{width:100%;padding:11px;border-radius:11px;border:none;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;margin-top:8px}
+  .btn.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);font-weight:500}
   .note{color:var(--dim);font-size:12px;line-height:1.6;margin:8px 0 0}
   .toast{
-    position:fixed;left:50%;bottom:calc(76px + var(--safe-b));transform:translateX(-50%);
-    background:#1b2942;border:1px solid var(--line);color:var(--text);padding:9px 14px;border-radius:11px;
+    position:fixed;left:50%;bottom:calc(86px + var(--safe-b));transform:translateX(-50%);
+    background:var(--text);color:var(--bg);padding:9px 14px;border-radius:11px;
     font-size:13px;z-index:80;opacity:0;transition:.2s;pointer-events:none;max-width:88vw;
   }
-  .toast.show{opacity:1}
+  .toast.show{opacity:.95}
 </style>
 </head>
 <body>
 <header>
   <span class="dot" id="statusDot"></span>
   <div>
-    <div class="title">阿蓝 · 手机端</div>
+    <div class="brand">阿蓝</div>
     <div class="sub" id="statusText">未同步</div>
   </div>
   <div class="spacer"></div>
+  <button class="iconbtn" id="btnNew">新对话</button>
   <button class="iconbtn" id="btnMemo">记忆</button>
-  <button class="iconbtn" id="btnSync">同步</button>
   <button class="iconbtn" id="btnSet">设置</button>
 </header>
 
 <main id="feed">
   <div class="hint" id="hint">
-    还没有配置。<br />点右上角「设置」填 API Key 与 GitHub 信息，<br />然后点「同步」把电脑上的记忆包拉下来。
+    <b>先说一次性的事</b><br />
+    设置里填 API Key 与 GitHub 信息 → 点「同步」拉下电脑的记忆包 → 就能聊了。<br />
+    支持图片、文件、联网、思考模式。
   </div>
 </main>
 
 <footer>
-  <textarea id="input" rows="1" placeholder="说点什么…（Shift+Enter 换行）"></textarea>
-  <button class="send" id="send">↑</button>
+  <div class="attach-rail" id="rail" style="display:none"></div>
+  <div class="tools">
+    <button class="tool" id="btnImg">图片</button>
+    <button class="tool" id="btnFile">文件</button>
+    <button class="tool" id="btnWeb">联网</button>
+    <button class="tool" id="btnThink">思考 · <span id="effortLabel">高</span></button>
+    <button class="tool" id="btnModel">deepseek-flash</button>
+  </div>
+  <div class="composer">
+    <textarea id="input" rows="1" placeholder="说点什么…（Enter 发送，Shift+Enter 换行）"></textarea>
+    <button class="send" id="send">↑</button>
+  </div>
 </footer>
+
+<input type="file" id="fileImg" accept="image/*" multiple hidden />
+<input type="file" id="fileDoc" multiple hidden />
 
 <!-- 设置 -->
 <div class="sheet" id="sheetSet">
@@ -127,8 +179,22 @@
     <div class="row"><label>API Key</label><input id="cfgKey" type="password" placeholder="sk-…" autocomplete="off" /></div>
     <div class="row"><label>模型</label>
       <select id="cfgModel">
-        <option value="deepseek-chat">deepseek-chat</option>
-        <option value="deepseek-reasoner">deepseek-reasoner</option>
+        <option value="deepseek-flash">deepseek-flash</option>
+        <option value="deepseek-v4-pro">deepseek-v4-pro</option>
+      </select>
+    </div>
+    <div class="row"><label>思考深度</label>
+      <select id="cfgEffort">
+        <option value="high">高（默认）</option>
+        <option value="max">最大</option>
+        <option value="low">低</option>
+        <option value="none">关闭思考</option>
+      </select>
+    </div>
+    <div class="row"><label>外观</label>
+      <select id="cfgTheme">
+        <option value="light">白色</option>
+        <option value="dark">深色</option>
       </select>
     </div>
     <div class="row"><label>API 地址</label><input id="cfgBase" placeholder="https://api.deepseek.com" /></div>
@@ -136,7 +202,7 @@
     <div class="row"><label>分支</label><input id="cfgBranch" placeholder="main" /></div>
     <div class="row"><label>PAT</label><input id="cfgPat" type="password" placeholder="github_pat_…" autocomplete="off" /></div>
     <div class="row"><label>包目录</label><input id="cfgPrefix" placeholder="pack" /></div>
-    <p class="note">Key 与 PAT 只存在这台手机的浏览器里（localStorage），不会上传到别处。PAT 只给数据仓 Contents 读写权限即可。</p>
+    <p class="note">Key 与 PAT 只存在这台手机的浏览器里。PAT 只需数据仓的 Contents 读写权限。</p>
     <button class="btn" id="saveCfg">保存并同步</button>
     <button class="btn ghost" id="diagBtn">诊断</button>
     <pre id="diagOut" style="display:none;margin-top:10px"></pre>
@@ -159,29 +225,32 @@
 
 <script>
 'use strict';
-const LS = 'dsh-memo-v1';
+const LS = 'dsh-memo-v2';
 const cfg = Object.assign({
-  key:'', model:'deepseek-chat', base:'https://api.deepseek.com',
-  repo:'', branch:'main', pat:'', prefix:'pack'
+  key:'', model:'deepseek-flash', effort:'high', theme:'light',
+  base:'https://api.deepseek.com',
+  repo:'', branch:'main', pat:'', prefix:'pack',
+  web:false, think:true,
 }, JSON.parse(localStorage.getItem(LS) || '{}'));
 
 const $ = (id) => document.getElementById(id);
 const feed = $('feed');
 let pack = { files:{}, at:null };
-let history = [];
+let history = [];          // [{role, content, reasoning?, sources?}]
+let attachments = [];      // [{kind:'image'|'file', name, dataUrl}]
 let busy = false;
+let memoCur = 'recent.md';
+
+document.documentElement.dataset.theme = cfg.theme || 'light';
 
 function saveCfg(){ localStorage.setItem(LS, JSON.stringify(cfg)); }
-function toast(msg, ms=2200){
+function toast(msg, ms=2400){
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove('show'), ms);
 }
-function setStatus(kind, text){
-  $('statusDot').className = 'dot ' + (kind||'');
-  $('statusText').textContent = text;
-}
+function setStatus(kind, text){ $('statusDot').className = 'dot ' + (kind||''); $('statusText').textContent = text; }
 
-/* ---------- base64 / utf8 ---------- */
+/* ---------- base64 ---------- */
 function b64decode(b64){
   const bin = atob(b64.replace(/\s/g,''));
   const bytes = new Uint8Array(bin.length);
@@ -196,7 +265,7 @@ function b64encode(str){
 }
 
 /* ---------- GitHub ---------- */
-const lastGh = { errors: [] };
+const ghErrors = [];
 function ghUrl(p, method){
   return `https://api.github.com/repos/${cfg.repo}/contents/${p.split('/').map(encodeURIComponent).join('/')}`
     + (method === 'GET' ? `?ref=${encodeURIComponent(cfg.branch)}` : '');
@@ -216,18 +285,16 @@ async function gh(method, p, body){
   if (res.status === 404) return null;
   if (!res.ok){
     const t = await res.text();
-    lastGh.errors.push(`${method} ${p} → ${res.status}`);
+    ghErrors.push(`${method} ${p} → ${res.status}`);
     throw new Error(`GitHub ${res.status} ${p}：${t.slice(0,120)}`);
   }
   return res.json();
 }
-
-// 只填了仓库名（没有 owner）时，用当前 token 的登录名补上前缀
 async function normalizeRepo(){
   if (!cfg.repo || cfg.repo.includes('/')) return cfg.repo;
   const me = await fetch('https://api.github.com/user', {
     headers: { 'Authorization': 'Bearer ' + cfg.pat, 'User-Agent': 'dsh-memo' }
-  }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  }).then((r)=>r.ok?r.json():null).catch(()=>null);
   if (me?.login){ cfg.repo = me.login + '/' + cfg.repo; saveCfg(); }
   return cfg.repo;
 }
@@ -235,8 +302,7 @@ async function normalizeRepo(){
 async function pullPack(){
   await normalizeRepo();
   const names = ['persona.md','rules.md','style.md','recent.md','skills.md','meta.json'];
-  const files = {};
-  const status = [];
+  const files = {}; const status = [];
   for (const n of names){
     let r = null;
     try { r = await gh('GET', `${cfg.prefix}/${n}`) }
@@ -245,29 +311,24 @@ async function pullPack(){
     else status.push(`${n}: 404`);
   }
   if (!Object.keys(files).length){
-    const hint = [
-      `仓库 ${cfg.repo} · 分支 ${cfg.branch} · 目录 ${cfg.prefix}`,
-      `PAT 长度 ${cfg.pat.length}`,
-      ...status.slice(0,3),
-    ].join(' / ');
-    throw new Error('没读到记忆包：' + hint);
+    throw new Error(['没读到记忆包', `仓库 ${cfg.repo}`, `分支 ${cfg.branch}`, `目录 ${cfg.prefix}`, ...status.slice(0,3)].join(' / '));
   }
   pack = { files, at: new Date() };
   const meta = files['meta.json'] ? JSON.parse(files['meta.json']) : null;
   const when = meta?.generatedAt ? new Date(meta.generatedAt).toLocaleString() : '未知时间';
   const kb = (Object.values(files).join('').length/1024).toFixed(1);
-  setStatus('ok', `记忆包 ${kb} KB · ${when}`);
+  setStatus('ok', `记忆 ${kb} KB · ${when}`);
   renderMemo();
   return pack;
 }
 
 async function appendPhoneNote(text){
+  if (!cfg.repo || !cfg.pat) throw new Error('没配置 GitHub，先到设置里填');
   const d = new Date();
   const day = d.toISOString().slice(0,10);
   const stamp = d.toTimeString().slice(0,5);
   const path = `${cfg.prefix}/phone/${day}.md`;
-  let cur = '';
-  let sha = null;
+  let cur = '', sha = null;
   const existing = await gh('GET', path).catch(()=>null);
   if (existing){ sha = existing.sha; cur = b64decode(existing.content); }
   const line = `\n- ${stamp} ${text.replace(/\s+/g,' ').trim().slice(0,400)}`;
@@ -277,14 +338,9 @@ async function appendPhoneNote(text){
 }
 
 /* ---------- 记忆面板 ---------- */
-const MEMO_TABS = [
-  ['recent.md','近况'], ['persona.md','人格'], ['rules.md','规则'],
-  ['style.md','风格'], ['skills.md','技能'],
-];
-let memoCur = 'recent.md';
+const MEMO_TABS = [['recent.md','近况'],['persona.md','人格'],['rules.md','规则'],['style.md','风格'],['skills.md','技能']];
 function renderMemo(){
-  const tabs = $('memoTabs');
-  tabs.innerHTML = '';
+  const tabs = $('memoTabs'); tabs.innerHTML = '';
   for (const [f,label] of MEMO_TABS){
     const b = document.createElement('button');
     b.className = 'tab' + (f===memoCur?' on':'');
@@ -295,71 +351,184 @@ function renderMemo(){
   $('memoBody').textContent = pack.files[memoCur] || '（还没拉取）';
 }
 
-/* ---------- 聊天 ---------- */
-function addMsg(role, text){
-  const div = document.createElement('div');
-  div.className = 'msg ' + (role==='user'?'user':'ai');
-  const body = document.createElement('div');
-  body.textContent = text;
-  div.appendChild(body);
-  if (role === 'assistant'){
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    const chip = document.createElement('button');
-    chip.className = 'chip';
-    chip.textContent = '记进手机笔记';
-    chip.onclick = async () => {
-      try { await appendPhoneNote(text); toast('已写进今天的手机笔记'); }
-      catch(e){ toast('写入失败：' + e.message, 3200); }
-    };
-    meta.appendChild(chip);
-    div.appendChild(meta);
+/* ---------- 渲染消息 ---------- */
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function addMessage(m){
+  const row = el('div', 'row-msg ' + (m.role === 'user' ? 'user' : 'ai'));
+  const av = el('div', 'avatar', m.role === 'user' ? '我' : '鱼');
+  const col = el('div', 'col');
+
+  if (m.reasoning){
+    const det = el('details', 'reason');
+    const sum = el('summary', '', '已深度思考');
+    det.appendChild(sum);
+    det.appendChild(el('div', '', m.reasoning));
+    col.appendChild(det);
   }
-  feed.appendChild(div);
+
+  const bubble = el('div', 'bubble', m.content || '');
+  col.appendChild(bubble);
+
+  const meta = el('div', 'meta');
+  const t = el('span', '', new Date(m.at || Date.now()).toTimeString().slice(0,5));
+  meta.appendChild(t);
+  if (m.model) meta.appendChild(el('span', '', m.model));
+
+  if (m.role === 'assistant' && m.content){
+    const cp = el('button', 'chip', '复制');
+    cp.onclick = async ()=>{ try{ await navigator.clipboard.writeText(m.content); toast('已复制'); }catch{ toast('复制失败'); } };
+    meta.appendChild(cp);
+    const note = el('button', 'chip', '记进笔记');
+    note.onclick = async ()=>{ try{ await appendPhoneNote(m.content); toast('已写入今天的手机笔记'); }catch(e){ toast('失败：'+e.message,3200); } };
+    meta.appendChild(note);
+    const re = el('button', 'chip', '重来');
+    re.onclick = ()=>{ regenerate(m); };
+    meta.appendChild(re);
+  }
+
+  if (m.sources?.length){
+    const box = el('div', 'srcs');
+    for (const s of m.sources){
+      const a = el('a', '', '· ' + (s.title || s.url));
+      a.href = s.url; a.target = '_blank'; a.rel = 'noreferrer';
+      box.appendChild(a);
+    }
+    meta.appendChild(box);
+  }
+  col.appendChild(meta);
+  row.appendChild(av); row.appendChild(col);
+  feed.appendChild(row);
   feed.scrollTop = feed.scrollHeight;
-  return div;
+  return { row, bubble };
 }
 
+/* ---------- 附件 ---------- */
+function renderRail(){
+  const rail = $('rail');
+  rail.innerHTML = '';
+  if (!attachments.length){ rail.style.display = 'none'; return; }
+  rail.style.display = 'flex';
+  attachments.forEach((a, i) => {
+    if (a.kind === 'image'){
+      const th = el('div', 'thumb');
+      const img = el('img'); img.src = a.dataUrl; th.appendChild(img);
+      const x = el('span', '', '×');
+      x.onclick = ()=>{ attachments.splice(i,1); renderRail(); };
+      th.appendChild(x);
+      rail.appendChild(th);
+    } else {
+      const c = el('div', 'filechip', '📄 ' + a.name);
+      const x = el('span', '', ' ×');
+      x.onclick = ()=>{ attachments.splice(i,1); renderRail(); };
+      c.appendChild(x);
+      rail.appendChild(c);
+    }
+  });
+}
+function readAsDataUrl(file){
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+
+/* ---------- 联网 ---------- */
+async function webSearch(q){
+  const res = await fetch(cfg.base.replace(/\/$/,'') + '/v1/tools/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.key },
+    body: JSON.stringify({ query: q.slice(0, 120), count: 5, need_content: false }),
+  });
+  if (!res.ok) throw new Error('搜索失败 ' + res.status);
+  const j = await res.json();
+  const results = j.results || [];
+  if (!results.length) return { text: '', sources: [] };
+  const text = results.map((r, i) =>
+    `[${i+1}] ${r.title}\n${r.url}\n${r.summary || r.snippet || ''}`
+  ).join('\n\n');
+  return { text, sources: results.map((r) => ({ title: r.title, url: r.url })) };
+}
+
+/* ---------- 聊天 ---------- */
 function systemPrompt(){
   const f = pack.files;
-  const parts = [];
-  parts.push('你叫「阿蓝」，一条蓝色小鱼，是用户的 AI 助手。说话轻快、短句优先，正事优先，俏皮话放最后。');
+  const parts = ['你叫「阿蓝」，一条蓝色小鱼，是用户的 AI 助手。说话轻快、短句优先，正事优先，俏皮话放最后。'];
   if (f['persona.md']) parts.push('# 人格设定\n' + f['persona.md']);
   if (f['rules.md']) parts.push('# 用户的硬性规则（必须遵守）\n' + f['rules.md']);
   if (f['style.md']) parts.push('# 风格与交付偏好\n' + f['style.md']);
   if (f['recent.md']) parts.push('# 用户最近在做的事（来自电脑，可能滞后）\n' + f['recent.md']);
   if (f['skills.md']) parts.push('# 已固化的技能\n' + f['skills.md']);
-  parts.push([
-    '## 这台设备的限制',
-    '你现在跑在手机上，看不到电脑的文件和终端，不能执行任务、不能跑代码。',
-    '如果用户要的是「在电脑上动手」，说明需要回到电脑前继续，并给出可以照做的步骤。',
-    '回答保持中文，长度适合手机阅读；需要清单时用短句。',
-  ].join('\n'));
+  parts.push('你现在跑在手机上：看不到电脑文件、不能执行任务。需要动手时，说明要回到电脑前继续。回答用中文，适合手机阅读。');
   return parts.join('\n\n');
+}
+
+function buildUserContent(text){
+  if (!attachments.length) return text;
+  const parts = [{ type:'text', text: text || '' }];
+  for (const a of attachments){
+    if (a.kind === 'image') parts.push({ type:'image_url', image_url: { url: a.dataUrl } });
+    else parts.push({ type:'file', file_data: a.dataUrl, filename: a.name });
+  }
+  return parts;
 }
 
 async function send(){
   const input = $('input');
   const text = input.value.trim();
-  if (!text || busy) return;
+  if ((!text && !attachments.length) || busy) return;
   if (!cfg.key){ toast('先在设置里填 API Key'); return; }
+
+  const userMsg = { role:'user', content: text, at: Date.now() };
+  const preview = text + (attachments.length ? `\n[附件 ${attachments.length} 个]` : '');
+  addMessage({ ...userMsg, content: preview });
+  const atts = attachments.slice();
+  attachments = []; renderRail();
   input.value = ''; input.style.height = 'auto';
-  addMsg('user', text);
-  history.push({role:'user', content:text});
+  history.push({ role:'user', content: buildUserContent(text) });
 
   busy = true; $('send').disabled = true;
-  const bubble = addMsg('assistant', '');
-  const body = bubble.firstChild;
+
+  let searchNote = '', sources = [];
+  if (cfg.web){
+    try{
+      const s = await webSearch(text || '最近新闻');
+      if (s.text){ searchNote = `以下是刚刚联网检索到的资料，回答时优先依据它们，并在合适处标注 [编号]：\n\n${s.text}`; sources = s.sources; }
+      else toast('检索没有结果，直接回答');
+    }catch(e){ toast('联网失败：' + e.message, 3200); }
+  }
+
+  const assistant = { role:'assistant', content:'', reasoning:'', at: Date.now(), model: cfg.model, sources };
+  const node = addMessage(assistant);
+  const body = node.bubble;
+
+  const bodyPayload = {
+    model: cfg.model,
+    stream: true,
+    messages: [
+      { role:'system', content: systemPrompt() },
+      ...(searchNote ? [{ role:'system', content: searchNote }] : []),
+      ...history.slice(-18),
+    ],
+  };
+  if (cfg.think){
+    bodyPayload.thinking = { type: 'enabled' };
+    bodyPayload.reasoning_effort = cfg.effort || 'high';
+  } else {
+    bodyPayload.thinking = { type: 'disabled' };
+  }
 
   try{
     const res = await fetch(cfg.base.replace(/\/$/,'') + '/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'Authorization':'Bearer ' + cfg.key },
-      body: JSON.stringify({
-        model: cfg.model,
-        stream: true,
-        messages: [{role:'system', content: systemPrompt()}, ...history.slice(-20)],
-      })
+      body: JSON.stringify(bodyPayload),
     });
     if (!res.ok){
       const t = await res.text();
@@ -367,11 +536,11 @@ async function send(){
     }
     const reader = res.body.getReader();
     const dec = new TextDecoder();
-    let buf = '', out = '';
+    let buf = '', out = '', reason = '';
     while (true){
-      const {value, done} = await reader.read();
+      const { value, done } = await reader.read();
       if (done) break;
-      buf += dec.decode(value, {stream:true});
+      buf += dec.decode(value, { stream:true });
       const parts = buf.split('\n\n');
       buf = parts.pop();
       for (const part of parts){
@@ -381,58 +550,120 @@ async function send(){
           if (data === '[DONE]') continue;
           try{
             const j = JSON.parse(data);
-            const d = j.choices?.[0]?.delta?.content || '';
-            if (d){ out += d; body.textContent = out; feed.scrollTop = feed.scrollHeight; }
+            const d = j.choices?.[0]?.delta || {};
+            if (d.reasoning_content){ reason += d.reasoning_content; assistant.reasoning = reason; }
+            if (d.content){ out += d.content; body.textContent = out; feed.scrollTop = feed.scrollHeight; }
           }catch{}
         }
       }
     }
-    history.push({role:'assistant', content: out || '（空回复）'});
+    assistant.content = out || '（空回复）';
+    body.textContent = assistant.content;
+    history.push({ role:'assistant', content: assistant.content });
   }catch(e){
-    body.textContent = '出错了：' + e.message + (e.message.includes('Failed to fetch') ? '\n（浏览器直连 API 被跨域拦截时，需要加一个代理地址，我可以给你做一个 Worker。）' : '');
+    body.textContent = '出错了：' + e.message + (e.message.includes('Failed to fetch') ? '\n（检查网络或 API 地址）' : '');
   }finally{
     busy = false; $('send').disabled = false;
   }
 }
 
+async function regenerate(msg){
+  if (busy) return;
+  const idx = history.findIndex((h) => h.role === 'assistant' && h.content === msg.content);
+  if (idx >= 0) history.splice(idx, 1);
+  const lastUser = [...history].reverse().find((h) => h.role === 'user');
+  if (!lastUser){ toast('没有可重试的问题'); return; }
+  msg.content = '';
+  // 简化：直接把用户问题重新发一遍
+  $('input').value = typeof lastUser.content === 'string' ? lastUser.content : '';
+  toast('已把问题放回输入框，按发送重试');
+}
+
 /* ---------- 事件 ---------- */
 $('send').onclick = send;
-$('input').addEventListener('keydown', (e)=>{
-  if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
-});
+$('input').addEventListener('keydown', (e)=>{ if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
 $('input').addEventListener('input', (e)=>{
   e.target.style.height = 'auto';
-  e.target.style.height = Math.min(e.target.scrollHeight, 132) + 'px';
+  e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px';
 });
 
-$('btnSet').onclick = ()=>{
-  $('cfgKey').value = cfg.key; $('cfgModel').value = cfg.model; $('cfgBase').value = cfg.base;
-  $('cfgRepo').value = cfg.repo; $('cfgBranch').value = cfg.branch; $('cfgPat').value = cfg.pat;
-  $('cfgPrefix').value = cfg.prefix;
-  $('sheetSet').classList.add('open');
+$('btnNew').onclick = ()=>{
+  if (!history.length){ toast('已经是新对话'); return; }
+  history = []; feed.innerHTML = '';
+  toast('新对话');
 };
+$('btnImg').onclick = ()=> $('fileImg').click();
+$('btnFile').onclick = ()=> $('fileDoc').click();
+$('fileImg').onchange = async (e)=>{
+  for (const f of e.target.files){
+    if (f.size > 4 * 1024 * 1024){ toast('图片太大（>4MB）'); continue; }
+    attachments.push({ kind:'image', name:f.name, dataUrl: await readAsDataUrl(f) });
+  }
+  e.target.value = ''; renderRail();
+};
+$('fileDoc').onchange = async (e)=>{
+  for (const f of e.target.files){
+    if (f.size > 3 * 1024 * 1024){ toast('文件太大（>3MB）'); continue; }
+    attachments.push({ kind:'file', name:f.name, dataUrl: await readAsDataUrl(f) });
+  }
+  e.target.value = ''; renderRail();
+};
+$('btnWeb').onclick = ()=>{
+  cfg.web = !cfg.web; saveCfg();
+  $('btnWeb').classList.toggle('on', cfg.web);
+  toast(cfg.web ? '联网已开启（每次提问会先搜索）' : '联网已关闭');
+};
+$('btnThink').onclick = ()=>{
+  if (cfg.think){
+    const order = ['high','max','low','none'];
+    cfg.effort = order[(order.indexOf(cfg.effort) + 1) % order.length];
+    if (cfg.effort === 'none') cfg.think = false;
+  } else {
+    cfg.think = true; cfg.effort = 'high';
+  }
+  saveCfg(); syncToolStates();
+  toast(cfg.think ? `思考深度：${labelOf(cfg.effort)}` : '思考已关闭');
+};
+$('btnModel').onclick = ()=>{
+  cfg.model = cfg.model === 'deepseek-flash' ? 'deepseek-v4-pro' : 'deepseek-flash';
+  saveCfg(); syncToolStates(); toast('模型：' + cfg.model);
+};
+function labelOf(e){ return { high:'高', max:'最大', low:'低', none:'关' }[e] || e; }
+function syncToolStates(){
+  $('btnModel').textContent = cfg.model;
+  $('effortLabel').textContent = cfg.think ? labelOf(cfg.effort) : '关';
+  $('btnThink').classList.toggle('on', cfg.think);
+  $('btnWeb').classList.toggle('on', cfg.web);
+}
+
+/* 设置 */
+function fillSettings(){
+  $('cfgKey').value = cfg.key; $('cfgModel').value = cfg.model; $('cfgEffort').value = cfg.effort;
+  $('cfgTheme').value = cfg.theme; $('cfgBase').value = cfg.base; $('cfgRepo').value = cfg.repo;
+  $('cfgBranch').value = cfg.branch; $('cfgPat').value = cfg.pat; $('cfgPrefix').value = cfg.prefix;
+}
+$('btnSet').onclick = ()=>{ fillSettings(); $('sheetSet').classList.add('open'); };
 $('closeSet').onclick = ()=> $('sheetSet').classList.remove('open');
 $('saveCfg').onclick = async ()=>{
   cfg.key = $('cfgKey').value.trim();
   cfg.model = $('cfgModel').value;
+  cfg.effort = $('cfgEffort').value;
+  cfg.theme = $('cfgTheme').value;
   cfg.base = $('cfgBase').value.trim() || 'https://api.deepseek.com';
   cfg.repo = $('cfgRepo').value.trim();
   cfg.branch = $('cfgBranch').value.trim() || 'main';
   cfg.pat = $('cfgPat').value.trim();
   cfg.prefix = $('cfgPrefix').value.trim() || 'pack';
-  saveCfg();
+  cfg.think = cfg.effort !== 'none';
+  saveCfg(); document.documentElement.dataset.theme = cfg.theme; syncToolStates();
   $('sheetSet').classList.remove('open');
   toast('已保存');
   try{ await normalizeRepo(); await pullPack(); toast('记忆包已同步'); }
   catch(e){ setStatus('warn','同步失败'); toast(e.message, 6000); }
 };
 $('diagBtn').onclick = async ()=>{
-  const out = $('diagOut');
-  out.style.display = 'block';
-  out.textContent = '检查中…';
-  const lines = [];
-  lines.push(`repo=${cfg.repo}  branch=${cfg.branch}  prefix=${cfg.prefix}`);
-  lines.push(`PAT 长度=${cfg.pat.length}  开头=${cfg.pat.slice(0, 11)}`);
+  const out = $('diagOut'); out.style.display = 'block'; out.textContent = '检查中…';
+  const lines = [`repo=${cfg.repo}  branch=${cfg.branch}  prefix=${cfg.prefix}`, `PAT 长度=${cfg.pat.length}`];
   try{
     const r = await fetch('https://api.github.com/user', { headers: { Authorization: 'Bearer ' + cfg.pat, 'User-Agent': 'dsh-memo' } });
     lines.push(`token → HTTP ${r.status}`);
@@ -440,40 +671,25 @@ $('diagBtn').onclick = async ()=>{
   }catch(e){ lines.push('token 检查失败：' + e.message); }
   for (const p of [cfg.prefix, `${cfg.prefix}/meta.json`]){
     try{
-      const r = await fetch(ghUrl(p, 'GET'), {
-        headers: { Authorization: 'Bearer ' + cfg.pat, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
-      });
+      const r = await fetch(ghUrl(p, 'GET'), { headers: { Authorization: 'Bearer ' + cfg.pat, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } });
       lines.push(`${p} → HTTP ${r.status}`);
-      if (r.ok){
-        const j = await r.json();
-        if (Array.isArray(j)) lines.push('  目录内容: ' + j.map((x) => x.name).join(', '));
-        else lines.push('  文件大小: ' + (j.size ?? '?') + 'B');
-      }
-    }catch(e){ lines.push(`${p} 请求失败：` + e.message); }
+      if (r.ok){ const j = await r.json(); if (Array.isArray(j)) lines.push('  目录: ' + j.map((x)=>x.name).join(', ')); }
+    }catch(e){ lines.push(`${p} 失败：` + e.message); }
   }
   out.textContent = lines.join('\n');
 };
+
+/* 记忆 */
 $('btnMemo').onclick = ()=>{ renderMemo(); $('sheetMemo').classList.add('open'); };
 $('closeMemo').onclick = ()=> $('sheetMemo').classList.remove('open');
-$('btnMemoPull').onclick = async ()=>{
-  try{ await pullPack(); toast('已重新拉取'); }catch(e){ toast(e.message, 3200); }
-};
-$('btnSync').onclick = async ()=>{
-  setStatus('warn','同步中…');
-  try{
-    await pullPack();
-    toast('记忆包已更新');
-  }catch(e){ setStatus('err','同步失败'); toast(e.message, 3600); }
-};
+$('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新拉取'); }catch(e){ toast(e.message, 3200); } };
 
-/* ---------- 启动 ---------- */
+/* 启动 */
 (async function boot(){
-  if ('serviceWorker' in navigator){
-    navigator.serviceWorker.register('./sw.js').catch(()=>{});
-  }
-  renderMemo();
-  if (!cfg.repo || !cfg.pat){ setStatus('','未配置'); return; }
-  try{ await pullPack(); }catch(e){ setStatus('warn','拉取失败'); toast(e.message, 3000); }
+  if ('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
+  syncToolStates(); renderMemo();
+  if (!cfg.repo || !cfg.pat){ setStatus('', '未配置记忆'); return; }
+  try{ await pullPack(); }catch(e){ setStatus('warn','记忆未同步'); }
 })();
 </script>
 </body>
