@@ -252,7 +252,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.14 · 2026-11-03 21:16';
+const APP_VER = '1.15 · 2026-11-03 21:22';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -744,6 +744,7 @@ function systemPrompt(){
   const f = pack.files;
   const parts = ['你叫「阿蓝」，一条蓝色小鱼，是用户的 AI 助手。说话轻快、短句优先，正事优先，俏皮话放最后。'];
   if (f['persona.md']) parts.push('# 人格设定\n' + f['persona.md']);
+  if (f['profile.md']) parts.push('# 用户画像（来自用户自己的长期记忆，优先采信）\n' + f['profile.md']);
   if (f['rules.md']) parts.push('# 用户的硬性规则\n' + f['rules.md']);
   if (f['style.md']) parts.push('# 风格与交付偏好\n' + f['style.md']);
   if (f['recent.md']) parts.push('# 用户最近在做的事（来自电脑，可能滞后）\n' + f['recent.md']);
