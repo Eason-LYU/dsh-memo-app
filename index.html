@@ -279,7 +279,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.36 · 2026-11-04 16:12';
+const APP_VER = '1.37 · 2026-11-04 16:20';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -695,7 +695,7 @@ function addMessage(m){
     cp.onclick = async ()=>{ try{ await navigator.clipboard.writeText(m.content); toast('已复制'); }catch{ toast('复制失败'); } };
     meta.appendChild(cp);
     const nt = el('button','chip','记进笔记');
-    nt.onclick = async ()=>{ try{ await appendPhoneNote(m.content); m.noted = true; toast('已写入手机笔记'); }catch(e){ toast('失败：'+e.message,3000); } };
+    nt.onclick = async ()=>{ try{ await pushNoteSafe(m.content); m.noted = true; toast('已写入手机笔记'); }catch(e){ } };
     meta.appendChild(nt);
   }
   if (m.sources?.length) meta.appendChild(renderSources(m.sources));
@@ -971,6 +971,40 @@ async function appendDurable(text){
   await gh('PUT', path, body);
   DURABLE = cur + line;
 }
+/* ---------- 离线队列：写不出去先存本地，联网后补传 ---------- */
+const QUEUE_KEY = 'alan.queue.v1';
+function queueAll(){ try{ const a = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); return Array.isArray(a) ? a : []; }catch{ return []; } }
+function queueSave(q){ localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); netBadge(); }
+function queueAdd(item){ const q = queueAll(); q.push({ ...item, at: Date.now() }); queueSave(q); }
+function netBadge(){
+  const n = queueAll().length;
+  if (!navigator.onLine) setStatus('warn', n ? `离线 · 待传 ${n}` : '离线');
+  else if (n) setStatus('warn', `待传 ${n}`);
+}
+async function flushQueue(){
+  const q = queueAll();
+  if (!q.length) return;
+  const keep = [];
+  for (const it of q){
+    try{
+      if (it.type === 'phone') await appendPhoneNote(it.text);
+      else await appendDurable(it.text);
+    }catch{ keep.push(it); }
+  }
+  queueSave(keep);
+  if (!keep.length) toast('离线暂存的笔记已补传', 2400);
+}
+async function pushNoteSafe(text){
+  try{ await appendPhoneNote(text); }
+  catch(e){ queueAdd({ type:'phone', text }); toast('离线：已暂存，联网后自动上传', 2800); throw e; }
+}
+async function pushDurableSafe(text){
+  try{ await appendDurable(text); }
+  catch(e){ queueAdd({ type:'durable', text }); toast('离线：已暂存，联网后自动上传', 2800); throw e; }
+}
+window.addEventListener('online', ()=>{ netBadge(); flushQueue(); });
+window.addEventListener('offline', netBadge);
+
 function memorySearch(q){
   const terms = String(q || '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6);
   if (!terms.length) return '（没有关键词）';
@@ -1245,10 +1279,10 @@ async function send(){
           } else if (c.function.name === 'memory_search'){
             out = memorySearch(String(args.query || ''));
           } else if (c.function.name === 'memory_write'){
-            try{ await appendPhoneNote('📌 ' + String(args.text || '')); out = '已记到今日手机笔记，下次同步到电脑'; }
+            try{ await pushNoteSafe('📌 ' + String(args.text || '')); out = '已记到今日手机笔记，下次同步到电脑'; }
             catch(e){ out = '写入失败：' + e.message; }
           } else if (c.function.name === 'memory_note'){
-            try{ await appendDurable(String(args.text || '')); out = '已写入长期记忆'; }
+            try{ await pushDurableSafe(String(args.text || '')); out = '已写入长期记忆'; }
             catch(e){ out = '写入失败：' + e.message; }
           }
         }catch(e){ out = '工具失败：' + e.message; }
