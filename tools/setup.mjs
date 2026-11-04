@@ -58,7 +58,10 @@ function walk(dir, base = '') {
   }
   return out
 }
-const APP_FILES = walk(path.join(ROOT, 'app'))
+// 兼容两种布局：有 app/ 子目录，或页面直接在仓库根目录
+const APP_DIR = fs.existsSync(path.join(ROOT, 'app')) ? path.join(ROOT, 'app') : ROOT;
+const isAppFile = (f) => /^(index\.html|sw\.js|manifest\.webmanifest|icon\.svg|stickers\.json)$/.test(f) || f.startsWith('vendor/');
+const APP_FILES = walk(APP_DIR).filter(isAppFile)
 
 async function main() {
   const me = await api('GET', '/user')
@@ -82,7 +85,7 @@ async function main() {
 
   // 1. 推 app 文件
   for (const f of APP_FILES) {
-    const body = fs.readFileSync(path.join(ROOT, 'app', f))
+    const body = fs.readFileSync(path.join(APP_DIR, f))
     const encoded = Buffer.from(body).toString('base64')
     const existing = await api('GET', `/repos/${appRepo}/contents/${f}?ref=${cfg.branch}`)
     if (f.startsWith('vendor/') && existing.status === 200 && existing.json?.size === body.length) {
