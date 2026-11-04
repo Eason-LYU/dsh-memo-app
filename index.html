@@ -256,6 +256,7 @@
     <p class="note" id="verLine"></p>
     <button class="btn" id="saveCfg">保存并同步</button>
     <button class="btn ghost" id="forceBtn">强制更新（清缓存重载）</button>
+    <button class="btn ghost" id="sliceBtn">长图切块：关</button>
     <button class="btn ghost" id="exportCfg">复制配置（换设备/换入口用）</button>
     <button class="btn ghost" id="importCfg">粘贴配置</button>
     <button class="btn ghost" id="diagBtn">诊断</button>
@@ -292,7 +293,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.42.1 · 2026-11-04 17:18';
+const APP_VER = '1.43 · 2026-11-04 21:46';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -314,7 +315,7 @@ const cfg = Object.assign({
   key:'', model:'deepseek-flash', theme:'light',
   base:'https://api.deepseek.com',
   repo:'', branch:'main', pat:'', prefix:'pack',
-  web:'auto', think:'auto', effort:'high', autonote:'on',
+  web:'auto', think:'auto', effort:'high', autonote:'on', slice:'off',
 }, JSON.parse(localStorage.getItem(LS) || '{}'));
 
 const $ = (id) => document.getElementById(id);
@@ -1487,7 +1488,7 @@ $('fileImg').onchange = async (e)=>{
     const compressed = (await compressImage(f)) || (await readAsDataUrl(f));
     const dims = await imageSize(compressed);
     let list = [compressed];
-    if (dims && dims.h > dims.w * 1.45){
+    if (cfg.slice === 'on' && dims && dims.h > dims.w * 1.45){
       const parts = dims.h > dims.w * 2.2 ? 3 : 2;
       list = await sliceTallImage(compressed, parts);
       toast(`长图已切 ${parts} 段发送，小字更容易看清`, 3200);
@@ -1587,6 +1588,10 @@ function showRenderBanner(){
   b.onclick = forceUpdate;
   document.body.appendChild(b);
 }
+function syncSliceBtn(){
+  const b = $('sliceBtn');
+  if (b) b.textContent = '长图切块：' + (cfg.slice === 'on' ? '开' : '关');
+}
 function fillSettings(){
   $('cfgKey').value = cfg.key; $('cfgModel').value = cfg.model;
   $('cfgWeb').value = cfg.web; $('cfgThink').value = cfg.think; $('cfgEffort').value = cfg.effort;
@@ -1595,7 +1600,7 @@ function fillSettings(){
   $('cfgBranch').value = cfg.branch; $('cfgPat').value = cfg.pat; $('cfgPrefix').value = cfg.prefix;
   updateVerLine();
 }
-$('btnSet').onclick = ()=>{ fillSettings(); $('sheetSet').classList.add('open'); };
+$('btnSet').onclick = ()=>{ fillSettings(); syncSliceBtn(); $('sheetSet').classList.add('open'); };
 $('logBtn').onclick = ()=>{
   $('logOut').textContent = logText() || '（暂无日志）';
   $('sheetSet').classList.remove('open');
@@ -1610,6 +1615,11 @@ $('logClear').onclick = ()=>{ LOGS = []; try{ localStorage.removeItem(LOG_KEY); 
 $('logCopy').onclick = async ()=>{
   try{ await navigator.clipboard.writeText(logText()); toast('已复制日志'); }
   catch{ toast('复制失败，长按手动选'); }
+};
+$('sliceBtn').onclick = ()=>{
+  cfg.slice = cfg.slice === 'on' ? 'off' : 'on';
+  saveCfg(); syncSliceBtn();
+  toast(cfg.slice === 'on' ? '长图会自动切 2–3 段发' : '长图整张发送（不切）');
 };
 $('closeSet').onclick = ()=> $('sheetSet').classList.remove('open');
 $('forceBtn').onclick = forceUpdate;
