@@ -292,7 +292,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.42 · 2026-11-04 17:12';
+const APP_VER = '1.42.1 · 2026-11-04 17:18';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1404,6 +1404,33 @@ async function send(){
       try{ renderRich(body, amSlot.content); }catch{}
     }
     try{ persistCurrent(); }catch{}
+    // 断了就给两个动作：继续写（带着半截续） / 重试（丢掉这条重发）
+    try{
+      const acts = el('div', 'acts');
+      acts.style.cssText = 'display:flex;gap:8px;margin:6px 0 0';
+      if (am.content && am.content.trim()){
+        const b1 = el('button', 'chip', '继续写');
+        b1.onclick = () => {
+          const inp = $('input');
+          inp.value = '从上面断掉的地方接着写，不要重复已经写过的内容。';
+          inp.dispatchEvent(new Event('input'));
+          inp.focus();
+        };
+        acts.appendChild(b1);
+      }
+      const b2 = el('button', 'chip', '重试');
+      b2.onclick = () => {
+        const idx = draft.indexOf(amSlot);
+        if (idx >= 0) draft.splice(idx, 1);
+        try{ persistCurrent(); }catch{}
+        openChat(curId);
+        const inp = $('input');
+        inp.value = text || '';
+        inp.dispatchEvent(new Event('input'));
+      };
+      acts.appendChild(b2);
+      node.row.querySelector('.col').appendChild(acts);
+    }catch{}
     const hadImg = attachments.some((a) => a.kind === 'image');
     if (hadImg && /400|invalid|image|content/i.test(e.message)){
       alog('send.hint', '可能图片过大或格式不被接受');
