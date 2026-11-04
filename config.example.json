@@ -1,0 +1,9 @@
+{
+  "repo": "你的用户名/dsh-memo-data",
+  "appRepo": "你的用户名/dsh-memo-app",
+  "branch": "main",
+  "prefix": "pack",
+  "outDir": "pack-out",
+  "workspace": "--C--Users-you-dsh-memory-workspaces--",
+  "maxRecentLines": 60
+}
