@@ -198,7 +198,7 @@
 </footer>
 
 <input type="file" id="fileImg" accept="image/*" multiple hidden />
-<input type="file" id="fileDoc" multiple hidden />
+<input type="file" id="fileDoc" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.json,application/pdf,text/plain" multiple hidden />
 
 <!-- 会话抽屉 -->
 <div class="drawer" id="drawer">
@@ -265,7 +265,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.29.2 · 2026-11-04 10:16';
+const APP_VER = '1.30 · 2026-11-04 10:24';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1157,8 +1157,8 @@ $('btnMenu').onclick = ()=>{ renderChatList(); $('drawer').classList.add('open')
 $('drawerMask').onclick = ()=> $('drawer').classList.remove('open');
 $('drawerNew').onclick = ()=>{ newChat(); $('drawer').classList.remove('open'); };
 $('btnNew').onclick = ()=>{ newChat(); };
-$('btnImg').onclick = ()=> $('fileImg').click();
-$('btnFile').onclick = ()=> $('fileDoc').click();
+$('btnImg').onclick = ()=>{ $('fileImg').value=''; $('fileImg').click(); };
+$('btnFile').onclick = ()=>{ $('fileDoc').value=''; $('fileDoc').click(); };
 $('fileImg').onchange = async (e)=>{
   for (const f of e.target.files){
     if (f.size > 25*1024*1024){ toast('图片太大（>25MB）'); continue; }
