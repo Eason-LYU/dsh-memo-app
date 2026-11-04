@@ -279,7 +279,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.34.1 · 2026-11-04 12:04';
+const APP_VER = '1.35 · 2026-11-04 14:16';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1005,6 +1005,32 @@ function systemPrompt(){
   parts.push('最后再确认一次身份：你在手机上叫「小蓝」，自称小蓝；「阿蓝」是电脑端那台的名字，不要混用。');
   return parts.join('\n\n');
 }
+function stripAttachPlaceholder(s){
+  return String(s || '').replace(/\n?\[附件 \d+ 个\]/g, '').trim();
+}
+// 历史消息重建成 API 能吃的形态：带上最近几张图 + PDF 文本，其余退化成文字
+function buildHistory(prior){
+  let imgBudget = 3;
+  const out = [];
+  for (let i = prior.length - 1; i >= 0; i--){
+    const m = prior[i];
+    if (m.role !== 'user'){ out.unshift(m); continue; }
+    const txt = stripAttachPlaceholder(m.content);
+    const atts = m.atts || [];
+    if (!atts.length){ out.unshift({ role:'user', content: txt }); continue; }
+    const parts = [{ type:'text', text: txt || '（见附图）' }];
+    for (const a of atts){
+      if (a.kind === 'pdf'){
+        parts.push({ type:'text', text: `【附件 PDF：${a.name}】\n${String(a.text || '').slice(0, 6000)}` });
+      } else if (a.kind === 'image' && a.dataUrl && imgBudget > 0){
+        parts.push({ type:'image_url', image_url: { url: a.dataUrl } });
+        imgBudget--;
+      }
+    }
+    out.unshift({ role:'user', content: parts });
+  }
+  return out;
+}
 function buildUserContent(text){
   if (!attachments.length) return text;
   const parts = [{ type:'text', text: text || '' }];
@@ -1102,7 +1128,7 @@ async function send(){
   input.value = ''; input.style.height = 'auto';
 
   if (!curId) newChat();
-  draft.push({ role:'user', content: shown });
+  draft.push({ role:'user', content: shown, atts: attachments.slice() });
   addMessage({ role:'user', content: shown, at: Date.now() });
   persistCurrent();
 
@@ -1125,7 +1151,7 @@ async function send(){
     onContent(t){ am.content = t; scheduleRender(body, t, nearBottom()); },
   };
 
-  const prior = draft.slice(0, -1).slice(-18);
+  const prior = buildHistory(draft.slice(0, -1).slice(-18));
   let messages = [
     { role:'system', content: systemPrompt() },
     ...prior,
@@ -1215,6 +1241,11 @@ async function send(){
   }catch(e){
     body.textContent = '出错了：' + e.message;
     if (e.message.includes('Failed to fetch')) body.textContent += '\n（网络或 API 地址问题）';
+    const hadImg = attachments.some((a) => a.kind === 'image');
+    if (hadImg && /400|invalid|image|content/i.test(e.message)){
+      body.textContent += '\n（这轮带了图片；若反复失败，可能是图片过大或格式不被接受——试试改发 PDF 或截小一点）';
+    }
+    console.warn('[send] failed', { imgs: attachments.filter((a)=>a.kind==='image').length, err: e.message });
   }finally{
     busy = false; $('send').disabled = false;
   }
