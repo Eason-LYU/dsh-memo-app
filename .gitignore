@@ -1,0 +1,8 @@
+# 绝不提交的东西
+token.txt
+tools/config.json
+tools/.memo-state.json
+tools/durable-cache.md
+pack-out/
+*.log
+.DS_Store
