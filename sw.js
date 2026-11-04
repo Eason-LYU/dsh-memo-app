@@ -1,6 +1,6 @@
 // 阿蓝手机端 · 极简离线壳
 // 只缓存静态外壳；记忆包与聊天内容走网络/本地存储，不进缓存。
-const V = 'alan-mobile-v43';
+const V = 'alan-mobile-v44';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (e) => {
