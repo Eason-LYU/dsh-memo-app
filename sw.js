@@ -1,10 +1,19 @@
-// 阿蓝手机端 · 极简离线壳
-// 只缓存静态外壳；记忆包与聊天内容走网络/本地存储，不进缓存。
-const V = 'alan-mobile-v46';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
+// 阿蓝手机端 · 离线外壳
+// 缓存页面 + 渲染库 + 表情清单，离线也能打开；记忆包/聊天走网络或 localStorage。
+const V = 'alan-mobile-v47';
+const SHELL = [
+  './', './index.html', './manifest.webmanifest', './icon.svg', './stickers.json',
+  './vendor/marked.min.js', './vendor/purify.min.js',
+  './vendor/katex.min.js', './vendor/auto-render.min.js', './vendor/katex.min.css',
+  './vendor/pdf/pdf.min.mjs',
+];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(V).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(V)
+      .then((c) => Promise.all(SHELL.map((u) => c.add(u).catch(() => {}))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -18,10 +27,8 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  // 只接管本站静态资源，API / GitHub 一律放行
   if (url.origin !== self.location.origin) return;
 
-  // 页面导航走网络优先，保证更新能立刻拿到；离线时回退缓存
   if (req.mode === 'navigate') {
     e.respondWith(fetch(req).then((res) => {
       const copy = res.clone();
