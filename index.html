@@ -292,7 +292,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.41 · 2026-11-04 17:00';
+const APP_VER = '1.41.1 · 2026-11-04 17:04';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -736,6 +736,8 @@ function addMessage(m){
   if (m.content){
     if (m.role === 'user') bubble.textContent = m.content;
     else renderRich(bubble, m.content);
+  } else if (m.streaming){
+    bubble.textContent = '（这条被中断了，没有生成内容）';
   }
   col.appendChild(bubble);
   if (m.sticker){
