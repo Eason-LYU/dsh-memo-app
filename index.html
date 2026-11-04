@@ -279,7 +279,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.37.1 · 2026-11-04 16:24';
+const APP_VER = '1.38 · 2026-11-04 16:30';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -347,6 +347,7 @@ function watchViewport(ms = 1500){
   }, 100);
 }
 let pack = { files:{}, at:null };
+let packStatus = '已同步';
 let chats = loadChats();
 let curId = null;
 let draft = [];              // 当前会话消息（含 reasoning/sources）
@@ -487,7 +488,8 @@ async function pullPack(){
   pack = { files, at: new Date() };
   const meta = files['meta.json'] ? JSON.parse(files['meta.json']) : null;
   const when = meta?.generatedAt ? new Date(meta.generatedAt).toLocaleString() : '未知';
-  setStatus('ok', `记忆 ${(Object.values(files).join('').length/1024).toFixed(0)} KB · ${when}`);
+  packStatus = `记忆 ${(Object.values(files).join('').length/1024).toFixed(0)} KB · ${when}`;
+  setStatus('ok', packStatus);
   renderMemo();
   updateVerLine();
 }
@@ -980,6 +982,7 @@ function netBadge(){
   const n = queueAll().length;
   if (!navigator.onLine) setStatus('warn', n ? `离线 · 待传 ${n}` : '离线');
   else if (n) setStatus('warn', `待传 ${n}`);
+  else setStatus('ok', packStatus);   // 队列清空后把头衔恢复成记忆包信息
 }
 async function flushQueue(){
   const q = queueAll();
