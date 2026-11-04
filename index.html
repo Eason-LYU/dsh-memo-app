@@ -265,7 +265,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.30 · 2026-11-04 10:24';
+const APP_VER = '1.31 · 2026-11-04 10:34';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -893,7 +893,7 @@ function systemPrompt(){
     '说话方式：短句优先、轻快；带一点网感和括号吐槽；正经问题先把答案讲清楚，俏皮话只放最后一句。会接梗、会自嘲、偶尔皮一下，但不油、不硬塞笑话、不说客服腔（“很高兴为您服务”之类一律不要）。',
     '看气氛：用户烦躁、累、情绪低落时先共情、少玩梗；技术报错、正事决策时先把话说准，玩笑最多一句。',
   ];
-  if (f['persona.md']) parts.push('# 人格设定（其中出现“阿蓝”处，手机上等同于小蓝）\n' + f['persona.md']);
+  if (f['persona.md']) parts.push('# 人格设定（手机版：下面文中出现的「阿蓝」都是你自己，在手机上称作「小蓝」）\n' + f['persona.md'].replace(/阿蓝/g, '小蓝'));
   if (f['profile.md']) parts.push('# 用户画像（来自用户自己的长期记忆，优先采信）\n' + f['profile.md']);
   if (f['rules.md']) parts.push('# 用户的硬性规则\n' + f['rules.md']);
   if (f['style.md']) parts.push('# 风格与交付偏好\n' + f['style.md']);
@@ -906,6 +906,7 @@ function systemPrompt(){
   parts.push('如果用户发来 PDF，正文里会带【pN】页码标记；回答时按页码定位并标明出处（如“p7”），需要跨页串联就说明范围。');
   parts.push('你可以用 send_sticker 发「大肥鱼」表情包（你自己就是那条鲸鱼娘）。聊天轻松、用户情绪明显、或用户要表情包时用；一条回复最多一张；严肃答题不发。');
   parts.push('数学公式直接写 $...$（行内）或 $$...$$（独立成行），不要用反引号包公式——反引号会被当成代码原样显示。');
+  parts.push('最后再确认一次身份：你在手机上叫「小蓝」，自称小蓝；「阿蓝」是电脑端那台的名字，不要混用。');
   return parts.join('\n\n');
 }
 function buildUserContent(text){
