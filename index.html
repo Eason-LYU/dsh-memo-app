@@ -279,7 +279,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.35 · 2026-11-04 14:16';
+const APP_VER = '1.36 · 2026-11-04 16:12';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -763,7 +763,7 @@ function readAsDataUrl(file){
   return new Promise((res, rej)=>{ const fr = new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); });
 }
 // 图片先在本机压到最长边 1600px 的 JPEG，再传；避免 iPhone 截图 >4MB 被拒
-function compressImage(file, maxSide = 1600, quality = 0.82){
+function compressImage(file, maxSide = 2400, quality = 0.9){
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -785,8 +785,40 @@ function compressImage(file, maxSide = 1600, quality = 0.82){
   });
 }
 
-/* ---------- 联网 ---------- */
-async function webSearch(q){
+/* ---------- 长图切块（卷面/课件整页，切成 2–3 段更利看清小字） ---------- */
+function imageSize(dataUrl){
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.width, h: img.height });
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+function sliceTallImage(dataUrl, parts){
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try{
+        const overlap = Math.round(img.height * 0.05);
+        const step = Math.ceil((img.height + overlap * (parts - 1)) / parts);
+        const out = [];
+        for (let i = 0; i < parts; i++){
+          const y = Math.max(0, i * step - (i ? overlap : 0));
+          const h = Math.min(img.height - y, step);
+          const cv = document.createElement('canvas');
+          cv.width = img.width; cv.height = h;
+          cv.getContext('2d').drawImage(img, 0, y, img.width, h, 0, 0, img.width, h);
+          out.push(cv.toDataURL('image/jpeg', 0.9));
+        }
+        resolve(out);
+      }catch{ resolve([dataUrl]); }
+    };
+    img.onerror = () => resolve([dataUrl]);
+    img.src = dataUrl;
+  });
+}
+
+/* ---------- 联网 ---------- */async function webSearch(q){
   const res = await fetch(cfg.base.replace(/\/$/,'') + '/v1/tools/search', {
     method:'POST',
     headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + cfg.key },
@@ -1002,6 +1034,7 @@ function systemPrompt(){
   parts.push('你可以用 send_sticker 发「大肥鱼」表情包（你自己就是那条鲸鱼娘）。聊天轻松、用户情绪明显、或用户要表情包时用；一条回复最多一张；严肃答题不发。');
   parts.push('记忆工具：memory_search 查已有记忆（不确定旧约定/旧结论时先用它）；memory_write 把本轮一句结论记进今日笔记；memory_note 记长期事实（用户说“记住”时）。别每轮都写，只写真正会复用的。');
   parts.push('数学公式直接写 $...$（行内）或 $$...$$（独立成行），不要用反引号包公式——反引号会被当成代码原样显示。');
+  parts.push('如果用户发来图片：整页卷面可能被切成 2–3 段按顺序发来，请把每段都看完再答；回答前先列出你看到的所有小问（如 (a)~(e)，含 (e)(ii) 这类子项），漏掉或看不清就直说“这段看不清，请补拍”，不要凭印象补全。');
   parts.push('最后再确认一次身份：你在手机上叫「小蓝」，自称小蓝；「阿蓝」是电脑端那台的名字，不要混用。');
   return parts.join('\n\n');
 }
@@ -1294,8 +1327,19 @@ $('btnFile').onclick = ()=>{ $('fileDoc').value=''; $('fileDoc').click(); };
 $('fileImg').onchange = async (e)=>{
   for (const f of e.target.files){
     if (f.size > 25*1024*1024){ toast('图片太大（>25MB）'); continue; }
-    const compressed = await compressImage(f);
-    attachments.push({ kind:'image', name:f.name, dataUrl: compressed || await readAsDataUrl(f) });
+    const compressed = (await compressImage(f)) || (await readAsDataUrl(f));
+    const dims = await imageSize(compressed);
+    let list = [compressed];
+    if (dims && dims.h > dims.w * 1.45){
+      const parts = dims.h > dims.w * 2.2 ? 3 : 2;
+      list = await sliceTallImage(compressed, parts);
+      toast(`长图已切 ${parts} 段发送，小字更容易看清`, 3200);
+    }
+    list.forEach((d, i) => attachments.push({
+      kind:'image',
+      name: f.name + (list.length > 1 ? `（${i + 1}/${list.length} 段）` : ''),
+      dataUrl: d,
+    }));
   }
   e.target.value=''; renderRail();
 };
