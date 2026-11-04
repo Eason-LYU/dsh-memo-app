@@ -279,7 +279,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.34 · 2026-11-04 12:00';
+const APP_VER = '1.34.1 · 2026-11-04 12:04';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -714,12 +714,12 @@ function renderSources(list){
     seen.add(url); items.push(s);
   }
   const box = el('div', 'srcs');
-  const list = el('div', 'srcList');
-  list.style.display = 'none';
+  const listBox = el('div', 'srcList');
+  listBox.style.display = 'none';
   const hd = el('button', 'hd', `参考 ${items.length} 条 ▾`);
   hd.onclick = () => {
-    const open = list.style.display !== 'none';
-    list.style.display = open ? 'none' : 'flex';
+    const open = listBox.style.display !== 'none';
+    listBox.style.display = open ? 'none' : 'flex';
     hd.textContent = open ? `参考 ${items.length} 条 ▾` : '收起 ▴';
   };
   box.appendChild(hd);
@@ -733,9 +733,9 @@ function renderSources(list){
     wrap.appendChild(el('div', 't', s.title || s.url));
     if (host) wrap.appendChild(el('div', 'h', host));
     a.appendChild(wrap);
-    list.appendChild(a);
+    listBox.appendChild(a);
   });
-  box.appendChild(list);
+  box.appendChild(listBox);
   return box;
 }
 function renderRail(){
