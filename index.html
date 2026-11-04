@@ -259,8 +259,20 @@
     <button class="btn ghost" id="exportCfg">复制配置（换设备/换入口用）</button>
     <button class="btn ghost" id="importCfg">粘贴配置</button>
     <button class="btn ghost" id="diagBtn">诊断</button>
+    <button class="btn ghost" id="logBtn">查看日志</button>
     <pre id="diagOut" style="display:none;margin-top:10px"></pre>
     <button class="btn ghost" id="closeSet">关闭</button>
+  </div>
+</div>
+
+<!-- 日志 -->
+<div class="sheet" id="sheetLog">
+  <div class="sheetbox">
+    <h3>诊断日志</h3>
+    <pre id="logOut" style="max-height:52vh;overflow:auto;white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,monospace;background:#f7f8fa;border-radius:10px;padding:8px;margin:8px 0"></pre>
+    <button class="btn" id="logCopy">复制全部</button>
+    <button class="btn ghost" id="logClear">清空</button>
+    <button class="btn ghost" id="closeLog">关闭</button>
   </div>
 </div>
 
@@ -279,7 +291,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.38 · 2026-11-04 16:30';
+const APP_VER = '1.39 · 2026-11-04 16:42';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -364,6 +376,20 @@ function toast(msg, ms=2400){
 }
 function setStatus(kind, text){ $('statusDot').className = 'dot ' + (kind||''); $('statusText').textContent = text; }
 
+/* ---------- 诊断日志（本地环形缓冲，可在设置里查看/复制） ---------- */
+const LOG_KEY = 'alan.log.v1';
+let LOGS = [];
+try{ LOGS = JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); }catch{ LOGS = []; }
+function alog(tag, msg){
+  const t = new Date().toTimeString().slice(0, 8);
+  let body = msg;
+  if (msg && typeof msg === 'object'){ try{ body = JSON.stringify(msg); }catch{ body = String(msg); } }
+  LOGS.push(`${t} [${tag}] ${String(body).slice(0, 400)}`);
+  if (LOGS.length > 400) LOGS = LOGS.slice(-400);
+  try{ localStorage.setItem(LOG_KEY, JSON.stringify(LOGS)); }catch{}
+}
+function logText(){ return LOGS.join('\n'); }
+
 /* ---------- 会话存储 ---------- */
 function loadChats(){
   try{
@@ -376,7 +402,7 @@ function saveChats(){
     // 只留最近 40 个会话，每个最多 80 条
     const cut = chats.slice(0, 40).map((c) => ({ ...c, msgs: (c.msgs || []).slice(-80) }));
     localStorage.setItem('alan.chats', JSON.stringify(cut));
-  }catch(e){ toast('本地存储满了，删几个旧对话'); }
+  }catch(e){ alog('store.err', e.message); toast('本地存储满了，删几个旧对话'); }
 }
 function newChat(){
   const c = { id: 'c' + Date.now(), title: '新对话', at: Date.now(), msgs: [] };
@@ -399,7 +425,12 @@ function openChat(id){
 function persistCurrent(){
   const c = chats.find((x) => x.id === curId);
   if (!c) return;
-  c.msgs = draft.slice();
+  // 存盘前剥掉附件本体（dataURL 太大，会把 localStorage 撑爆导致整条消息存不进去）
+  c.msgs = draft.map((m) => {
+    if (!m.atts || !m.atts.length) return m;
+    const { atts, ...rest } = m;
+    return { ...rest, attsMeta: atts.map((a) => ({ kind: a.kind, name: a.name, pages: a.pages })) };
+  });
   if (c.title === '新对话'){
     const first = draft.find((m) => m.role === 'user');
     if (first) c.title = String(first.content).replace(/\s+/g,' ').slice(0, 18) || '新对话';
@@ -489,6 +520,7 @@ async function pullPack(){
   const meta = files['meta.json'] ? JSON.parse(files['meta.json']) : null;
   const when = meta?.generatedAt ? new Date(meta.generatedAt).toLocaleString() : '未知';
   packStatus = `记忆 ${(Object.values(files).join('').length/1024).toFixed(0)} KB · ${when}`;
+  alog('pack.ok', { files: Object.keys(files).length, kb: +(Object.values(files).join('').length/1024).toFixed(0) });
   setStatus('ok', packStatus);
   renderMemo();
   updateVerLine();
@@ -1193,6 +1225,13 @@ async function send(){
   if (!cfg.key){ toast('先填 API Key'); return; }
 
   const shown = text + (attachments.length ? `\n[附件 ${attachments.length} 个]` : '');
+  alog('send', {
+    chars: (text || '').length,
+    imgs: attachments.filter((a) => a.kind === 'image').length,
+    pdfs: attachments.filter((a) => a.kind === 'pdf').length,
+    files: attachments.filter((a) => a.kind === 'file').length,
+    model: cfg.model,
+  });
   const userContent = attachments.length ? buildUserContent(text) : (text || '(附件)');
   attachments = []; renderRail();
   input.value = ''; input.style.height = 'auto';
@@ -1248,7 +1287,8 @@ async function send(){
   try{
     let collected = '';
     for (let round = 0; round < 3; round++){
-      const r = await streamChat(messages, tools, ui);
+      alog('api.req', { model: cfg.model, msgs: messages.length, imgs: messages.reduce((n, m) => n + (Array.isArray(m.content) ? m.content.filter((p) => p.type === 'image_url').length : 0), 0) });
+  const r = await streamChat(messages, tools, ui);
       collected += r.content;
 
       if (!r.toolCalls.length){
@@ -1295,6 +1335,7 @@ async function send(){
     }
 
     am.content = collected || '（空回复）';
+    alog('api.ok', { chars: am.content.length, toolCalls: am.sources.length });
     renderRich(body, am.content);
     if (am.sticker){
       const im = el('img', 'sticker');
@@ -1316,6 +1357,7 @@ async function send(){
       body.textContent += '\n（这轮带了图片；若反复失败，可能是图片过大或格式不被接受——试试改发 PDF 或截小一点）';
     }
     console.warn('[send] failed', { imgs: attachments.filter((a)=>a.kind==='image').length, err: e.message });
+    alog('send.err', e.message);
   }finally{
     busy = false; $('send').disabled = false;
   }
@@ -1476,6 +1518,17 @@ function fillSettings(){
   updateVerLine();
 }
 $('btnSet').onclick = ()=>{ fillSettings(); $('sheetSet').classList.add('open'); };
+$('logBtn').onclick = ()=>{
+  $('logOut').textContent = logText() || '（暂无日志）';
+  $('sheetSet').classList.remove('open');
+  $('sheetLog').classList.add('open');
+};
+$('closeLog').onclick = ()=> $('sheetLog').classList.remove('open');
+$('logClear').onclick = ()=>{ LOGS = []; try{ localStorage.removeItem(LOG_KEY); }catch{} $('logOut').textContent = '（已清空）'; };
+$('logCopy').onclick = async ()=>{
+  try{ await navigator.clipboard.writeText(logText()); toast('已复制日志'); }
+  catch{ toast('复制失败，长按手动选'); }
+};
 $('closeSet').onclick = ()=> $('sheetSet').classList.remove('open');
 $('forceBtn').onclick = forceUpdate;
 $('saveCfg').onclick = async ()=>{
@@ -1533,6 +1586,7 @@ $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新�
 
 /* 启动 */
 (async function boot(){
+  alog('boot', { ver: APP_SHORT, online: navigator.onLine });
   if ('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
   syncTools(); renderMemo();
   loadStickers();
@@ -1547,7 +1601,7 @@ $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新�
   rerenderAll();
   setTimeout(showRenderBanner, 600);
   if (!cfg.repo || !cfg.pat){ setStatus('', '未配置记忆'); return; }
-  try{ await pullPack(); }catch(e){ setStatus('warn','记忆未同步'); }
+  try{ await pullPack(); }catch(e){ alog('pack.err', e.message); setStatus('warn','记忆未同步'); }
 })();
 </script>
 </body>
