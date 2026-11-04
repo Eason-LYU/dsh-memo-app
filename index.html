@@ -79,7 +79,9 @@
   .bubble img{max-width:100%;border-radius:8px}
   .sticker{width:150px;height:150px;object-fit:contain;margin-top:8px;border-radius:12px;display:block;background:transparent}
   .srcs{display:flex;flex-direction:column;gap:6px;margin:10px 0 2px;width:100%}
-  .srcs .hd{font-size:11px;letter-spacing:.02em;color:var(--muted);margin:0 0 2px 2px}
+  .srcs .hd{font:inherit;font-size:11px;letter-spacing:.02em;color:var(--muted);margin:0 0 2px 2px;
+    background:none;border:0;padding:2px 0;text-align:left;cursor:pointer}
+  .srcs .srcList{display:none;flex-direction:column;gap:6px}
   .srcs .src{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);
     border-radius:12px;background:var(--bg);text-decoration:none;color:inherit;overflow:hidden}
   .srcs .src:active{background:var(--hover,#f5f6f8)}
@@ -277,7 +279,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.33 · 2026-11-04 11:55';
+const APP_VER = '1.34 · 2026-11-04 12:00';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -712,7 +714,15 @@ function renderSources(list){
     seen.add(url); items.push(s);
   }
   const box = el('div', 'srcs');
-  box.appendChild(el('div', 'hd', `参考 ${items.length} 条`));
+  const list = el('div', 'srcList');
+  list.style.display = 'none';
+  const hd = el('button', 'hd', `参考 ${items.length} 条 ▾`);
+  hd.onclick = () => {
+    const open = list.style.display !== 'none';
+    list.style.display = open ? 'none' : 'flex';
+    hd.textContent = open ? `参考 ${items.length} 条 ▾` : '收起 ▴';
+  };
+  box.appendChild(hd);
   items.forEach((s, i) => {
     const a = el('a', 'src');
     a.href = s.url; a.target = '_blank'; a.rel = 'noreferrer';
@@ -723,8 +733,9 @@ function renderSources(list){
     wrap.appendChild(el('div', 't', s.title || s.url));
     if (host) wrap.appendChild(el('div', 'h', host));
     a.appendChild(wrap);
-    box.appendChild(a);
+    list.appendChild(a);
   });
+  box.appendChild(list);
   return box;
 }
 function renderRail(){
