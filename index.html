@@ -279,7 +279,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.37 · 2026-11-04 16:20';
+const APP_VER = '1.37.1 · 2026-11-04 16:24';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1534,6 +1534,8 @@ $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新�
   syncTools(); renderMemo();
   loadStickers();
   loadDurable();
+  netBadge();
+  flushQueue();
   $('verShort').textContent = APP_SHORT;
   // 等渲染库就绪再铺历史消息：脚本是 defer，可能在首帧之后才可用
   await whenLibs(2500);
