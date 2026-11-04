@@ -270,7 +270,8 @@
   <div class="sheetbox">
     <h3>诊断日志</h3>
     <pre id="logOut" style="max-height:52vh;overflow:auto;white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,monospace;background:#f7f8fa;border-radius:10px;padding:8px;margin:8px 0"></pre>
-    <button class="btn" id="logCopy">复制全部</button>
+    <button class="btn" id="logPush">上传给阿蓝</button>
+    <button class="btn ghost" id="logCopy">复制全部</button>
     <button class="btn ghost" id="logClear">清空</button>
     <button class="btn ghost" id="closeLog">关闭</button>
   </div>
@@ -291,7 +292,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.39 · 2026-11-04 16:42';
+const APP_VER = '1.40 · 2026-11-04 16:52';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -387,8 +388,30 @@ function alog(tag, msg){
   LOGS.push(`${t} [${tag}] ${String(body).slice(0, 400)}`);
   if (LOGS.length > 400) LOGS = LOGS.slice(-400);
   try{ localStorage.setItem(LOG_KEY, JSON.stringify(LOGS)); }catch{}
+  if (/(\.err|err\.)/.test(tag)) scheduleLogUpload();
 }
 function logText(){ return LOGS.join('\n'); }
+// 把日志推到数据仓库，电脑端直接读（iOS 上不好导文件）
+async function uploadLogs(){
+  if (!cfg.repo || !cfg.pat) throw new Error('没配置 GitHub');
+  const d = new Date();
+  const stamp = d.toISOString().replace(/[:.]/g, '-').slice(0, 16);
+  const path = `${cfg.prefix}/phone/logs/${stamp}.md`;
+  const head = `# 小蓝日志 ${d.toISOString()}\n\n- 版本: ${APP_VER}\n- 在线: ${navigator.onLine}\n- UA: ${navigator.userAgent}\n\n\`\`\`\n${logText()}\n\`\`\`\n`;
+  await gh('PUT', path, { message: `log: ${stamp}`, content: b64encode(head), branch: cfg.branch });
+  return path;
+}
+let logPushTimer = null;
+function scheduleLogUpload(){
+  if (logPushTimer) return;
+  const last = Number(localStorage.getItem('alan.log.lastPush') || 0);
+  if (Date.now() - last < 5 * 60 * 1000) return;
+  logPushTimer = setTimeout(() => {
+    logPushTimer = null;
+    localStorage.setItem('alan.log.lastPush', String(Date.now()));
+    uploadLogs().then((p) => alog('log.uploaded', p)).catch((e) => alog('log.upload.err', e.message));
+  }, 8000);
+}
 
 /* ---------- 会话存储 ---------- */
 function loadChats(){
@@ -1522,6 +1545,10 @@ $('logBtn').onclick = ()=>{
   $('logOut').textContent = logText() || '（暂无日志）';
   $('sheetSet').classList.remove('open');
   $('sheetLog').classList.add('open');
+};
+$('logPush').onclick = async ()=>{
+  try{ const p = await uploadLogs(); toast('日志已上传：' + p, 3200); }
+  catch(e){ toast('上传失败：' + e.message, 3200); }
 };
 $('closeLog').onclick = ()=> $('sheetLog').classList.remove('open');
 $('logClear').onclick = ()=>{ LOGS = []; try{ localStorage.removeItem(LOG_KEY); }catch{} $('logOut').textContent = '（已清空）'; };
