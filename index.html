@@ -265,7 +265,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.31 · 2026-11-04 10:34';
+const APP_VER = '1.32 · 2026-11-04 10:45';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -870,6 +870,60 @@ function pickSticker(mood){
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+const MEM_TOOLS = [
+  { type:'function', function:{ name:'memory_search', description:'查记忆：用户画像、规则、近期日志摘要、长期事实。用户问“我以前怎么说的/我们约定过什么/上次做到哪”时调用。',
+    parameters:{ type:'object', properties:{ query:{ type:'string', description:'关键词或一句话' } }, required:['query'], additionalProperties:false } } },
+  { type:'function', function:{ name:'memory_write', description:'把本轮值得留的一句结论写进当天手机笔记（会和电脑同步）。只写结论，不要写过程。',
+    parameters:{ type:'object', properties:{ text:{ type:'string' } }, required:['text'], additionalProperties:false } } },
+  { type:'function', function:{ name:'memory_note', description:'记一条长期事实/偏好/约定（跨会话一直有效）。用户说“记住”时用。',
+    parameters:{ type:'object', properties:{ text:{ type:'string' } }, required:['text'], additionalProperties:false } } },
+];
+
+let DURABLE = '';
+async function loadDurable(){
+  if (!cfg.repo || !cfg.pat) return;
+  try{
+    const ex = await gh('GET', `${cfg.prefix}/phone/durable.md`);
+    if (ex) DURABLE = b64decode(ex.content);
+  }catch{}
+}
+async function appendDurable(text){
+  if (!cfg.repo || !cfg.pat) throw new Error('没配置 GitHub');
+  const d = new Date(); const stamp = d.toISOString().slice(0,10);
+  const path = `${cfg.prefix}/phone/durable.md`;
+  let cur = '', sha = null;
+  const ex = await gh('GET', path).catch(()=>null);
+  if (ex){ sha = ex.sha; cur = b64decode(ex.content); }
+  const line = `- ${stamp} ${String(text).replace(/\s+/g,' ').slice(0,400)}\n`;
+  const body = { message: `durable: ${stamp}`, content: b64encode(cur + line), branch: cfg.branch };
+  if (sha) body.sha = sha;
+  await gh('PUT', path, body);
+  DURABLE = cur + line;
+}
+function memorySearch(q){
+  const terms = String(q || '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6);
+  if (!terms.length) return '（没有关键词）';
+  const rows = [];
+  const scan = (src, text) => {
+    for (const raw of String(text).split(/\r?\n/)){
+      const line = raw.trim();
+      if (line.length < 8) continue;
+      const low = line.toLowerCase();
+      let score = 0;
+      for (const t of terms) if (low.includes(t)) score++;
+      if (score) rows.push({ src, score, line });
+    }
+  };
+  for (const [k, v] of Object.entries(pack.files || {})){
+    if (typeof v === 'string' && k.endsWith('.md')) scan(k, v);
+  }
+  if (DURABLE) scan('durable', DURABLE);
+  rows.sort((a, b) => b.score - a.score);
+  const top = rows.slice(0, 6);
+  if (!top.length) return '（记忆里没有相关内容）';
+  return top.map((r) => `[${r.src}] ${r.line.slice(0, 200)}`).join('\n');
+}
+
 const SEARCH_TOOL = {
   type: 'function',
   function: {
@@ -898,6 +952,8 @@ function systemPrompt(){
   if (f['rules.md']) parts.push('# 用户的硬性规则\n' + f['rules.md']);
   if (f['style.md']) parts.push('# 风格与交付偏好\n' + f['style.md']);
   if (f['recent.md']) parts.push('# 用户最近在做的事（来自电脑，可能滞后）\n' + f['recent.md']);
+  if (f['digest.md']) parts.push('# 近期要点（分层摘要：7 天 / 30 天）\n' + f['digest.md']);
+  if (f['durable.md']) parts.push('# 长期事实（你在手机上记下的）\n' + f['durable.md']);
   if (f['skills.md']) parts.push('# 已固化的技能\n' + f['skills.md']);
   parts.push('你现在跑在手机上：看不到电脑文件、不能执行任务。需要动手时说明回电脑继续。结论先行，适合手机阅读。');
   parts.push(cfg.web === 'off'
@@ -905,6 +961,7 @@ function systemPrompt(){
     : '你有三个工具：web_search（联网检索）、fetch_url（读网页正文）、tell_joke（本地冷笑话）。判断需要时自己调用，不需要就别调；引用检索结果时标 [编号]。');
   parts.push('如果用户发来 PDF，正文里会带【pN】页码标记；回答时按页码定位并标明出处（如“p7”），需要跨页串联就说明范围。');
   parts.push('你可以用 send_sticker 发「大肥鱼」表情包（你自己就是那条鲸鱼娘）。聊天轻松、用户情绪明显、或用户要表情包时用；一条回复最多一张；严肃答题不发。');
+  parts.push('记忆工具：memory_search 查已有记忆（不确定旧约定/旧结论时先用它）；memory_write 把本轮一句结论记进今日笔记；memory_note 记长期事实（用户说“记住”时）。别每轮都写，只写真正会复用的。');
   parts.push('数学公式直接写 $...$（行内）或 $$...$$（独立成行），不要用反引号包公式——反引号会被当成代码原样显示。');
   parts.push('最后再确认一次身份：你在手机上叫「小蓝」，自称小蓝；「阿蓝」是电脑端那台的名字，不要混用。');
   return parts.join('\n\n');
@@ -1049,7 +1106,9 @@ async function send(){
     setStatus('ok','记忆已同步');
   }
 
-  const tools = cfg.web === 'off' ? [FETCH_TOOL, JOKE_TOOL, STICKER_TOOL] : [SEARCH_TOOL, FETCH_TOOL, JOKE_TOOL, STICKER_TOOL];
+  const tools = cfg.web === 'off'
+    ? [FETCH_TOOL, JOKE_TOOL, STICKER_TOOL, ...MEM_TOOLS]
+    : [SEARCH_TOOL, FETCH_TOOL, JOKE_TOOL, STICKER_TOOL, ...MEM_TOOLS];
 
   try{
     let collected = '';
@@ -1085,6 +1144,14 @@ async function send(){
             const s = pickSticker(String(args.mood || ''));
             if (s){ am.sticker = s; out = `已发一张表情：${s.name}（${s.emotion}）`; }
             else out = '（表情库未加载）';
+          } else if (c.function.name === 'memory_search'){
+            out = memorySearch(String(args.query || ''));
+          } else if (c.function.name === 'memory_write'){
+            try{ await appendPhoneNote('📌 ' + String(args.text || '')); out = '已记到今日手机笔记，下次同步到电脑'; }
+            catch(e){ out = '写入失败：' + e.message; }
+          } else if (c.function.name === 'memory_note'){
+            try{ await appendDurable(String(args.text || '')); out = '已写入长期记忆'; }
+            catch(e){ out = '写入失败：' + e.message; }
           }
         }catch(e){ out = '工具失败：' + e.message; }
         messages.push({ role:'tool', tool_call_id: c.id, content: out });
@@ -1324,6 +1391,7 @@ $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新�
   if ('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
   syncTools(); renderMemo();
   loadStickers();
+  loadDurable();
   $('verShort').textContent = APP_SHORT;
   // 等渲染库就绪再铺历史消息：脚本是 defer，可能在首帧之后才可用
   await whenLibs(2500);
