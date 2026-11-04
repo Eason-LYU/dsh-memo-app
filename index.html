@@ -292,7 +292,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.40 · 2026-11-04 16:52';
+const APP_VER = '1.41 · 2026-11-04 17:00';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -724,8 +724,7 @@ function scheduleRender(node, text, stick){
   }, 140);
 }
 function addMessage(m){
-  const row = el('div', 'row-msg ' + (m.role === 'user' ? 'user' : 'ai'));
-  row.appendChild(el('div', 'avatar', m.role === 'user' ? '我' : '鱼'));
+  const row = el('div', 'row-msg ' + (m.role === 'user' ? 'user' : 'ai'));  row.appendChild(el('div', 'avatar', m.role === 'user' ? '我' : '鱼'));
   const col = el('div', 'col');
   if (m.reasoning){
     const det = el('details', 'reason');
@@ -1267,6 +1266,25 @@ async function send(){
   busy = true; $('send').disabled = true;
 
   const am = { role:'assistant', content:'', reasoning:'', at: Date.now(), web:false, sources:[] };
+  // 流式开始前先占位落盘：切后台/切会话时，已完成的部分不会凭空消失
+  const amSlot = { role:'assistant', content:'', reasoning:'', at: Date.now(), web:false, sources:[], streaming:true };
+  draft.push(amSlot);
+  let saveTick = 0;
+  const savePartial = (force) => {
+    const now = Date.now();
+    if (!force && now - saveTick < 800) return;
+    saveTick = now;
+    amSlot.content = am.content;
+    amSlot.reasoning = am.reasoning;
+    persistCurrent();
+  };
+  if (!window.__visHooked){
+    window.__visHooked = true;
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && typeof window.__savePartial === 'function') window.__savePartial(true);
+    });
+  }
+  window.__savePartial = savePartial;
   const node = addMessage(am);
   const body = node.bubble;
   let reasonDet = null, reasonDiv = null;
@@ -1280,7 +1298,7 @@ async function send(){
   };
   const ui = {
     onReason(t){ am.reasoning = t; ensureReason(); reasonDiv.textContent = t; feed.scrollTop = feed.scrollHeight; },
-    onContent(t){ am.content = t; scheduleRender(body, t, nearBottom()); },
+    onContent(t){ am.content = t; scheduleRender(body, t, nearBottom()); savePartial(false); },
   };
 
   const prior = buildHistory(draft.slice(0, -1).slice(-18));
@@ -1369,18 +1387,26 @@ async function send(){
     if (am.sources.length){
       node.row.querySelector('.col').appendChild(renderSources(am.sources));
     }
-    draft.push({ role:'assistant', content: am.content, reasoning: am.reasoning, web: am.web, sources: am.sources, sticker: am.sticker });
+    Object.assign(amSlot, { content: am.content, reasoning: am.reasoning, web: am.web, sources: am.sources, sticker: am.sticker, streaming: false });
     persistCurrent();
     autoNote(text, am.content, am);
   }catch(e){
-    body.textContent = '出错了：' + e.message;
-    if (e.message.includes('Failed to fetch')) body.textContent += '\n（网络或 API 地址问题）';
+    alog('send.err', e.message);
+    if (am.content && am.content.trim()){
+      amSlot.streaming = false;
+      amSlot.content = am.content + '\n\n（已中断：切到后台或网络断开，这里保留已生成的部分；重新发一次可继续）';
+      try{ renderRich(body, amSlot.content); }catch{}
+    } else {
+      amSlot.streaming = false;
+      amSlot.content = '（这次没生成出来：' + e.message + '）';
+      try{ renderRich(body, amSlot.content); }catch{}
+    }
+    try{ persistCurrent(); }catch{}
     const hadImg = attachments.some((a) => a.kind === 'image');
     if (hadImg && /400|invalid|image|content/i.test(e.message)){
-      body.textContent += '\n（这轮带了图片；若反复失败，可能是图片过大或格式不被接受——试试改发 PDF 或截小一点）';
+      alog('send.hint', '可能图片过大或格式不被接受');
     }
     console.warn('[send] failed', { imgs: attachments.filter((a)=>a.kind==='image').length, err: e.message });
-    alog('send.err', e.message);
   }finally{
     busy = false; $('send').disabled = false;
   }
