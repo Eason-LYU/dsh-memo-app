@@ -18,7 +18,7 @@ function readToken() {
   return ''
 }
 const token = readToken()
-if (!token) { console.error('没有找到 token：请把 token 粘进项目根目录的 token.txt 后保存'); process.exit(1) }
+if (!token) { console.error('没有找到 token：请把 token 粘进 E:\\dsworkplace\\dsh-memo\\token.txt 后保存'); process.exit(1) }
 
 const API = 'https://api.github.com'
 const H = {
@@ -58,10 +58,7 @@ function walk(dir, base = '') {
   }
   return out
 }
-// 兼容两种布局：有 app/ 子目录，或页面直接在仓库根目录
-const APP_DIR = fs.existsSync(path.join(ROOT, 'app')) ? path.join(ROOT, 'app') : ROOT;
-const isAppFile = (f) => /^(index\.html|sw\.js|manifest\.webmanifest|icon\.svg|stickers\.json)$/.test(f) || f.startsWith('vendor/');
-const APP_FILES = walk(APP_DIR).filter(isAppFile)
+const APP_FILES = walk(path.join(ROOT, 'app'))
 
 async function main() {
   const me = await api('GET', '/user')
@@ -83,9 +80,12 @@ async function main() {
     console.log(`仓库 ${r} ok · 默认分支 ${info.json.default_branch} · ${info.json.private ? '私有' : '公开'} · Pages ${info.json.has_pages}`)
   }
 
-  // 1. 推 app 文件
+  // 1. 推 app 文件（先放 .nojekyll，避免 Pages 的 Jekyll 处理报错）
+  await api('PUT', `/repos/${appRepo}/contents/.nojekyll`, {
+    message: 'chore: disable jekyll', content: Buffer.from('').toString('base64'), branch: cfg.branch,
+  }).catch(() => {})
   for (const f of APP_FILES) {
-    const body = fs.readFileSync(path.join(APP_DIR, f))
+    const body = fs.readFileSync(path.join(ROOT, 'app', f))
     const encoded = Buffer.from(body).toString('base64')
     const existing = await api('GET', `/repos/${appRepo}/contents/${f}?ref=${cfg.branch}`)
     if (f.startsWith('vendor/') && existing.status === 200 && existing.json?.size === body.length) {
