@@ -262,6 +262,8 @@
     <div class="row"><label>分支</label><input id="cfgBranch" placeholder="main" /></div>
     <div class="row"><label>PAT</label><input id="cfgPat" type="password" placeholder="github_pat_…" autocomplete="off" /></div>
     <div class="row"><label>包目录</label><input id="cfgPrefix" placeholder="pack" /></div>
+    <div class="row"><label>语音引擎</label><select id="cfgAsr"><option value="sys">系统听写（免费，主屏幕模式常失败）</option><option value="sf">SiliconFlow SenseVoice（准，需 Key）</option></select></div>
+    <div class="row"><label>SF Key</label><input id="cfgSfKey" type="password" placeholder="sk-…（硅基流动，可选）" autocomplete="off" /></div>
     <p class="note">Key 与 PAT 只存在这台手机的浏览器里。PAT 只需数据仓的 Contents 读写权限。</p>
     <p class="note" id="verLine"></p>
     <button class="btn" id="saveCfg">保存并同步</button>
@@ -316,7 +318,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.50 · 2026-11-06 00:58';
+const APP_VER = '1.51 · 2026-11-06 00:14';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -338,7 +340,7 @@ const cfg = Object.assign({
   key:'', model:'deepseek-flash', theme:'light',
   base:'https://api.deepseek.com',
   repo:'', branch:'main', pat:'', prefix:'pack',
-  web:'auto', think:'auto', effort:'high', autonote:'on', slice:'off', asrFix:'on',
+  web:'auto', think:'auto', effort:'high', autonote:'on', slice:'off', asrFix:'on', asrEngine:'sys', sfKey:'',
 }, JSON.parse(localStorage.getItem(LS) || '{}'));
 
 const $ = (id) => document.getElementById(id);
@@ -1640,6 +1642,7 @@ function fillSettings(){
   $('cfgAutoNote').value = cfg.autonote || 'on';
   $('cfgTheme').value = cfg.theme; $('cfgBase').value = cfg.base; $('cfgRepo').value = cfg.repo;
   $('cfgBranch').value = cfg.branch; $('cfgPat').value = cfg.pat; $('cfgPrefix').value = cfg.prefix;
+  $('cfgAsr').value = cfg.asrEngine || 'sys'; $('cfgSfKey').value = cfg.sfKey || '';
   updateVerLine();
 }
 $('btnSet').onclick = ()=>{ fillSettings(); syncSliceBtn(); syncAsrBtn(); $('sheetSet').classList.add('open'); };
@@ -1679,6 +1682,7 @@ $('saveCfg').onclick = async ()=>{
   cfg.base = $('cfgBase').value.trim() || 'https://api.deepseek.com';
   cfg.repo = $('cfgRepo').value.trim(); cfg.branch = $('cfgBranch').value.trim() || 'main';
   cfg.pat = $('cfgPat').value.trim(); cfg.prefix = $('cfgPrefix').value.trim() || 'pack';
+  cfg.asrEngine = $('cfgAsr').value; cfg.sfKey = $('cfgSfKey').value.trim();
   saveCfg(); document.documentElement.dataset.theme = cfg.theme; syncTools();
   $('sheetSet').classList.remove('open'); toast('已保存');
   try{ await pullPack(); toast('记忆包已同步'); }
@@ -1781,6 +1785,53 @@ async function fixAsrText(raw){
   }catch{ return raw; }
 }
 
+/* SiliconFlow 语音转写：MediaRecorder 录音 → /v1/audio/transcriptions */
+let sfRec = null, sfChunks = [];
+async function startSfRec(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
+    sfRec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    sfChunks = [];
+    sfRec.ondataavailable = (e)=>{ if (e.data && e.data.size) sfChunks.push(e.data); };
+    sfRec.onstop = async ()=>{
+      stream.getTracks().forEach((t) => t.stop());
+      micSetOn(false);
+      const type = sfRec.mimeType || mime || 'audio/mp4';
+      const blob = new Blob(sfChunks, { type });
+      if (blob.size < 1500){ toast('录音太短，再来一次', 2000); return; }
+      toast('正在识别…', 1500);
+      try{
+        const fd = new FormData();
+        fd.append('file', blob, 'voice.' + (type.includes('mp4') ? 'm4a' : 'webm'));
+        fd.append('model', 'FunAudioLLM/SenseVoiceSmall');
+        const r = await fetch('https://api.siliconflow.cn/v1/audio/transcriptions', {
+          method:'POST', headers:{ Authorization: 'Bearer ' + cfg.sfKey }, body: fd,
+        });
+        if (!r.ok){ toast('识别失败 HTTP ' + r.status, 4000); alog('asr.err', { status: r.status }); return; }
+        const j = await r.json();
+        const text = (j.text || '').trim();
+        alog('asr.ok', { chars: text.length, bytes: blob.size });
+        if (!text){ toast('没听清，再说一次', 2400); return; }
+        const inp = $('input');
+        inp.value = micBase + text;
+        inp.dispatchEvent(new Event('input'));
+        if (cfg.asrFix === 'on' && cfg.key){
+          const fixed = await fixAsrText(inp.value);
+          if (fixed && fixed !== inp.value){ inp.value = fixed; inp.dispatchEvent(new Event('input')); }
+        }
+      }catch(e){ toast('识别失败：' + e.message, 3600); alog('asr.err', { msg: e.message }); }
+    };
+    sfRec.start();
+    micSetOn(true);
+    toast('录音中，说完再点一次', 1800);
+  }catch(e){
+    micSetOn(false);
+    toast('麦克风打不开：' + (e.message || e.name), 4000);
+    alog('asr.mic.err', { name: e.name, msg: e.message });
+  }
+}
+
 /* ---------- 语音输入 ---------- */
 /* 只创建一个实例反复复用：iOS 上每点一次 new 一个，第二次 start() 会抛 InvalidStateError */
 let recog = null, recording = false, micBase = '', micLastEnd = 0;
@@ -1832,7 +1883,14 @@ function micEnsure(){
   return recog;
 }
 $('btnMic').onclick = ()=>{
-  if (!MIC_SUPPORTED()){ toast('这个浏览器不支持语音输入；可以点键盘右下角的「听写」键', 4200); return; }
+  // SiliconFlow 路线：录音 → 上传转写（iOS 主屏幕模式不再依赖系统听写）
+  if ((cfg.asrEngine || 'sys') === 'sf' && cfg.sfKey){
+    if (sfRec && sfRec.state === 'recording'){ try{ sfRec.stop(); }catch{} return; }
+    micBase = $('input').value ? $('input').value + ' ' : '';
+    startSfRec();
+    return;
+  }
+  if (!MIC_SUPPORTED()){ toast('这个浏览器不支持语音输入；可以点右下角的「听写」键', 4200); return; }
   const r = micEnsure();
   if (recording){ try{ r.stop(); }catch{} return; }
   micBase = $('input').value ? $('input').value + ' ' : '';
