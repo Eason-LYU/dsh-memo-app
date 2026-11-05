@@ -125,6 +125,9 @@
   .tool.on{background:var(--text);color:var(--bg);border-color:var(--text)}
   .tool.auto{border-style:dashed}
   .composer{display:flex;gap:8px;align-items:flex-end}
+.micbtn{width:34px;height:46px;flex:0 0 34px;display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:#98a0ae;padding:0;border-radius:10px}
+.micbtn.on{color:#fff;background:var(--accent);border-radius:10px;width:34px}
   textarea{flex:1;resize:none;max-height:140px;min-height:44px;padding:11px 13px;border-radius:13px;
     border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;outline:none}
   textarea:focus{border-color:#c7ccd4}
@@ -201,12 +204,18 @@
   <div class="tools">
     <button class="tool" id="btnImg">图片</button>
     <button class="tool" id="btnFile">文件</button>
-    <button class="tool" id="btnMic" title="语音输入">🎤</button>
     <button class="tool auto" id="btnWeb">联网·自动</button>
     <button class="tool auto" id="btnThink">思考·自动</button>
     <button class="tool" id="btnModel">flash</button>
   </div>
   <div class="composer">
+    <button class="micbtn" id="btnMic" title="语音输入" aria-label="语音输入">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+        <rect x="9" y="2.5" width="6" height="11" rx="3"></rect>
+        <path d="M5 11a7 7 0 0 0 14 0"></path>
+        <path d="M12 18.5v2.5"></path>
+      </svg>
+    </button>
     <textarea id="input" rows="1" placeholder="说点什么…（Enter 发送）"></textarea>
     <button class="send" id="send">↑</button>
   </div>
@@ -306,7 +315,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.46 · 2026-11-05 23:28';
+const APP_VER = '1.47 · 2026-11-06 00:10';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1739,28 +1748,51 @@ $('durableSave').onclick = async ()=>{
 };
 
 /* ---------- 语音输入 ---------- */
-let recog = null, recording = false;
-function stopMic(){ recording = false; $('btnMic').classList.remove('on'); }
-$('btnMic').onclick = ()=>{
+/* 只创建一个实例反复复用：iOS 上每点一次 new 一个，第二次 start() 会抛 InvalidStateError */
+let recog = null, recording = false, micBase = '', micLastEnd = 0;
+const MIC_SUPPORTED = () => !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+function micSetOn(on){ recording = on; $('btnMic').classList.toggle('on', on); }
+function micEnsure(){
+  if (recog) return recog;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR){ toast('这个浏览器不支持语音输入；可以点键盘右下角的「听写」键', 4200); return; }
-  if (recording && recog){ try{ recog.stop(); }catch{} return; }
   recog = new SR();
   recog.lang = 'zh-CN';
   recog.continuous = false;
   recog.interimResults = true;
-  const base = $('input').value;
-  recog.onstart = ()=>{ recording = true; $('btnMic').classList.add('on'); toast('在听了，说句话', 1600); };
+  recog.onstart = ()=>{ micSetOn(true); };
   recog.onresult = (e)=>{
     let t = '';
     for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript;
     const inp = $('input');
-    inp.value = base + t;
+    inp.value = (micBase + t).replace(/\s+$/,'');
     inp.dispatchEvent(new Event('input'));
   };
-  recog.onerror = (e)=>{ stopMic(); toast('语音出错：' + e.error, 3600); };
-  recog.onend = ()=> stopMic();
-  try{ recog.start(); }catch(e){ stopMic(); toast('启动失败：' + e.message, 3000); }
+  recog.onerror = (e)=>{
+    micSetOn(false);
+    const msg = { 'not-allowed':'没有麦克风权限，去 设置→Safari→麦克风 打开',
+                  'service-not-allowed':'系统不允许语音服务',
+                  'no-speech':'没听到声音，再说一次' }[e.error] || ('语音出错：' + e.error);
+    toast(msg, 3600);
+    alog('mic.err', e.error);
+  };
+  recog.onend = ()=>{ micSetOn(false); micLastEnd = Date.now(); };
+  return recog;
+}
+$('btnMic').onclick = ()=>{
+  if (!MIC_SUPPORTED()){ toast('这个浏览器不支持语音输入；可以点键盘右下角的「听写」键', 4200); return; }
+  const r = micEnsure();
+  if (recording){ try{ r.stop(); }catch{} return; }
+  // 上一次刚结束就立刻 start 也会抛错，等 250ms
+  const wait = Math.max(0, 250 - (Date.now() - micLastEnd));
+  micBase = $('input').value ? $('input').value + ' ' : '';
+  clearTimeout(window.__micT);
+  window.__micT = setTimeout(()=>{
+    try{ r.start(); }
+    catch(e){
+      try{ r.abort(); }catch{}
+      setTimeout(()=>{ try{ r.start(); }catch(e2){ toast('启动失败：' + e2.message, 3200); alog('mic.start.err', e2.message); } }, 300);
+    }
+  }, wait);
 };
 $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新拉取'); }catch(e){ toast(e.message, 3000); } };
 
