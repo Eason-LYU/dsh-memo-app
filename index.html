@@ -316,7 +316,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.48 · 2026-11-06 00:31';
+const APP_VER = '1.49 · 2026-11-06 00:46';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1803,11 +1803,17 @@ function micEnsure(){
   };
   recog.onerror = (e)=>{
     micSetOn(false);
-    const msg = { 'not-allowed':'没有麦克风权限，去 设置→Safari→麦克风 打开',
-                  'service-not-allowed':'系统不允许语音服务',
-                  'no-speech':'没听到声音，再说一次' }[e.error] || ('语音出错：' + e.error);
-    toast(msg, 3600);
-    alog('mic.err', e.error);
+    const standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+    let msg = { 'not-allowed':'没有麦克风权限：设置 → Safari → 麦克风 打开',
+                'service-not-allowed':'系统没给语音服务权限',
+                'audio-capture':'麦克风被别的 App 占着，先关掉它们',
+                'no-speech':'没听到声音，再说一次',
+                'aborted':'这次被打断了，再点一次' }[e.error] || ('语音出错：' + e.error);
+    if (standalone && (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'audio-capture')){
+      msg = '主屏幕模式下系统不给语音（' + e.error + '）：改用 Safari 打开同一网址就能听写';
+    }
+    toast(msg, 4800);
+    alog('mic.err', { code: e.error, standalone, ua: navigator.userAgent.slice(0, 60) });
   };
   recog.onend = async ()=>{
     micSetOn(false); micLastEnd = Date.now();
@@ -1845,7 +1851,7 @@ $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新�
 
 /* 启动 */
 (async function boot(){
-  alog('boot', { ver: APP_SHORT, online: navigator.onLine });
+  alog('boot', { ver: APP_SHORT, online: navigator.onLine, standalone: !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches), mic: !!(window.SpeechRecognition || window.webkitSpeechRecognition) });
   if ('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
   syncTools(); renderMemo();
   loadStickers();
