@@ -316,7 +316,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.49 · 2026-11-06 00:46';
+const APP_VER = '1.50 · 2026-11-06 00:58';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1835,17 +1835,20 @@ $('btnMic').onclick = ()=>{
   if (!MIC_SUPPORTED()){ toast('这个浏览器不支持语音输入；可以点键盘右下角的「听写」键', 4200); return; }
   const r = micEnsure();
   if (recording){ try{ r.stop(); }catch{} return; }
-  // 上一次刚结束就立刻 start 也会抛错，等 250ms
-  const wait = Math.max(0, 250 - (Date.now() - micLastEnd));
   micBase = $('input').value ? $('input').value + ' ' : '';
-  clearTimeout(window.__micT);
-  window.__micT = setTimeout(()=>{
+  // 关键：start() 必须在这次点击的手势里同步调用。
+  // iOS 只认“用户手势时刻”发起的语音会话，放进 setTimeout 就会被系统吊销 → error: aborted
+  try{
+    r.start();
+  }catch(e){
+    // 上一次会话没释放干净：同步 abort 后再试一次（仍在手势里）
+    try{ r.abort(); }catch{}
     try{ r.start(); }
-    catch(e){
-      try{ r.abort(); }catch{}
-      setTimeout(()=>{ try{ r.start(); }catch(e2){ toast('启动失败：' + e2.message, 3200); alog('mic.start.err', e2.message); } }, 300);
+    catch(e2){
+      toast('麦克风没启动：' + (e2.message || e2.name), 3600);
+      alog('mic.start.err', { name: e2.name, msg: e2.message });
     }
-  }, wait);
+  }
 };
 $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新拉取'); }catch(e){ toast(e.message, 3000); } };
 
