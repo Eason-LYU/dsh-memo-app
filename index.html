@@ -201,6 +201,7 @@
   <div class="tools">
     <button class="tool" id="btnImg">图片</button>
     <button class="tool" id="btnFile">文件</button>
+    <button class="tool" id="btnMic" title="语音输入">🎤</button>
     <button class="tool auto" id="btnWeb">联网·自动</button>
     <button class="tool auto" id="btnThink">思考·自动</button>
     <button class="tool" id="btnModel">flash</button>
@@ -285,7 +286,19 @@
     <div class="tabs" id="memoTabs"></div>
     <pre id="memoBody">（还没拉取）</pre>
     <button class="btn" id="btnMemoPull">重新拉取</button>
+    <button class="btn ghost" id="btnDurable">长期记忆（可编辑）</button>
     <button class="btn ghost" id="closeMemo">关闭</button>
+  </div>
+</div>
+
+<!-- 长期记忆编辑 -->
+<div class="sheet" id="sheetDurable">
+  <div class="sheetbox">
+    <h3>长期记忆 durable.md</h3>
+    <p class="note">这些是手机上记下的“长期事实”，会同步给电脑端。可直接改、删行。</p>
+    <textarea id="durableText" rows="14" style="width:100%;box-sizing:border-box;font:13px/1.5 ui-monospace,monospace;border:1px solid #e3e6ec;border-radius:10px;padding:10px"></textarea>
+    <button class="btn" id="durableSave">保存到数据仓</button>
+    <button class="btn ghost" id="closeDurable">关闭</button>
   </div>
 </div>
 
@@ -293,7 +306,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.45 · 2026-11-05 21:36';
+const APP_VER = '1.46 · 2026-11-05 23:28';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1689,6 +1702,66 @@ $('diagBtn').onclick = async ()=>{
 /* 记忆 */
 $('btnMemo').onclick = ()=>{ renderMemo(); $('sheetMemo').classList.add('open'); };
 $('closeMemo').onclick = ()=> $('sheetMemo').classList.remove('open');
+
+/* ---------- 长期记忆：可看可改 ---------- */
+function b64decodeUtf8(s){
+  const bin = atob(String(s || '').replace(/\s/g, ''));
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(arr);
+}
+async function openDurable(){
+  $('durableText').value = '读取中…';
+  try{
+    const r = await gh('GET', `${cfg.prefix}/phone/durable.md`);
+    $('durableText').value = r && r.content ? b64decodeUtf8(r.content) : '';
+    alog('durable.open', { bytes: (r && r.content ? r.content.length : 0) });
+  }catch(e){
+    $('durableText').value = '';
+    toast('读取失败：' + e.message, 3200);
+  }
+  $('sheetMemo').classList.remove('open');
+  $('sheetDurable').classList.add('open');
+}
+$('btnDurable').onclick = openDurable;
+$('closeDurable').onclick = ()=> $('sheetDurable').classList.remove('open');
+$('durableSave').onclick = async ()=>{
+  const text = $('durableText').value;
+  try{
+    const old = await gh('GET', `${cfg.prefix}/phone/durable.md`).catch(() => null);
+    const body = { message: 'memory: edit durable', content: b64encode(text), branch: cfg.branch };
+    if (old && old.sha) body.sha = old.sha;
+    await gh('PUT', `${cfg.prefix}/phone/durable.md`, body);
+    toast('已保存，下次同步生效');
+    $('sheetDurable').classList.remove('open');
+    alog('durable.save', { chars: text.length });
+  }catch(e){ toast('保存失败：' + e.message, 3600); }
+};
+
+/* ---------- 语音输入 ---------- */
+let recog = null, recording = false;
+function stopMic(){ recording = false; $('btnMic').classList.remove('on'); }
+$('btnMic').onclick = ()=>{
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR){ toast('这个浏览器不支持语音输入；可以点键盘右下角的「听写」键', 4200); return; }
+  if (recording && recog){ try{ recog.stop(); }catch{} return; }
+  recog = new SR();
+  recog.lang = 'zh-CN';
+  recog.continuous = false;
+  recog.interimResults = true;
+  const base = $('input').value;
+  recog.onstart = ()=>{ recording = true; $('btnMic').classList.add('on'); toast('在听了，说句话', 1600); };
+  recog.onresult = (e)=>{
+    let t = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript;
+    const inp = $('input');
+    inp.value = base + t;
+    inp.dispatchEvent(new Event('input'));
+  };
+  recog.onerror = (e)=>{ stopMic(); toast('语音出错：' + e.error, 3600); };
+  recog.onend = ()=> stopMic();
+  try{ recog.start(); }catch(e){ stopMic(); toast('启动失败：' + e.message, 3000); }
+};
 $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新拉取'); }catch(e){ toast(e.message, 3000); } };
 
 /* 启动 */
