@@ -293,7 +293,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.44 · 2026-11-05 00:52';
+const APP_VER = '1.45 · 2026-11-05 21:36';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1164,7 +1164,8 @@ function buildUserContent(text){
   for (const a of attachments){
     if (a.kind === 'image') parts.push({ type:'image_url', image_url: { url: a.dataUrl } });
     else if (a.kind === 'pdf') parts.push({ type:'text', text: `【附件 PDF：${a.name}】\n${a.text}` });
-    else parts.push({ type:'file', file_data: a.dataUrl, filename: a.name });
+    else if (a.kind === 'text') parts.push({ type:'text', text: `【附件文本：${a.name}】\n${a.text}` });
+    else parts.push({ type:'text', text: `【附件：${a.name}】（手机端无法解析此格式，仅能看到文件名）` });
   }
   return parts;
 }
@@ -1248,6 +1249,11 @@ async function send(){
   const text = input.value.trim();
   if ((!text && !attachments.length) || busy) return;
   if (!cfg.key){ toast('先填 API Key'); return; }
+  const badFiles = attachments.filter((a) => a.kind === 'file');
+  if (badFiles.length){
+    toast('这些格式手机读不了内容：' + badFiles.map((a) => a.name).join('、') + ' —— 转成 PDF 或截图再发', 5000);
+    return;
+  }
 
   const shown = text + (attachments.length ? `\n[附件 ${attachments.length} 个]` : '');
   alog('send', {
@@ -1514,7 +1520,16 @@ $('fileDoc').onchange = async (e)=>{
       }catch(err){ toast('PDF 解析失败：' + err.message, 4000); }
       continue;
     }
+    const textLike = /\.(txt|md|csv|json|log|ya?ml|html?)$/i.test(f.name) || /^text\//.test(f.type || '');
+    if (textLike){
+      const raw = await f.text();
+      attachments.push({ kind:'text', name:f.name, text: raw.slice(0, 20000) });
+      toast(`已读取文本 ${f.name}（${(raw.length/1000).toFixed(1)}k 字）`, 2600);
+      continue;
+    }
+    // 其余二进制格式（docx/xlsx/pptx…）手机端解不了，别假装发出去了
     attachments.push({ kind:'file', name:f.name, dataUrl: await readAsDataUrl(f) });
+    toast('这种格式手机端读不了内容，建议转成 PDF 或截图再发', 4200);
   }
   e.target.value=''; renderRail();
 };
