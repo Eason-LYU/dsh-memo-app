@@ -1,6 +1,6 @@
 // 阿蓝手机端 · 离线外壳
 // 缓存页面 + 渲染库 + 表情清单，离线也能打开；记忆包/聊天走网络或 localStorage。
-const V = 'alan-mobile-v62';
+const V = 'alan-mobile-v63';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './icon.svg', './stickers.json',
   './vendor/marked.min.js', './vendor/purify.min.js',
