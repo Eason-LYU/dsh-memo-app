@@ -318,7 +318,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.51 · 2026-11-06 00:14';
+const APP_VER = '1.52 · 2026-11-07 22:52';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1406,10 +1406,18 @@ async function send(){
         }catch(e){ out = '工具失败：' + e.message; }
         messages.push({ role:'tool', tool_call_id: c.id, content: out });
       }
-      if (round === 2) toast('搜索轮次已达上限');
+      if (round === 2){
+        // 用完工具轮次却还没收尾：补一次「不许再调工具」的收尾请求，逼它把话说完
+        toast('搜索轮次已达上限，正在收尾…', 2000);
+        messages.push({ role:'system', content:'工具轮次已用完。现在不要调用任何工具，直接基于上面已经拿到的资料，用中文把答案写完；资料不足就说明哪部分没查到。' });
+        try{
+          const fin = await streamChat(messages, [], ui);
+          collected += fin.content || '';
+        }catch(e){ alog('api.final.err', e.message); }
+      }
     }
 
-    am.content = collected || '（空回复）';
+    am.content = collected || '（这次没答上来：搜索用完三轮仍没收尾。可以直接再问一次，或把问题缩小一点。）';
     alog('api.ok', { chars: am.content.length, toolCalls: am.sources.length });
     renderRich(body, am.content);
     if (am.sticker){
