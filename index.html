@@ -318,7 +318,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.54 · 2026-11-10 21:50';
+const APP_VER = '1.55 · 2026-11-10 22:10';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1053,7 +1053,20 @@ async function appendDurable(text){
   const body = { message: `durable: ${stamp}`, content: b64encode(cur + line), branch: cfg.branch };
   if (sha) body.sha = sha;
   await gh('PUT', path, body);
-  DURABLE = cur + line;
+  // 写完回读校验；可能被另一台设备同时写掉，就重读再追加一次
+  const chk = await gh('GET', path).catch(() => null);
+  const okWrite = chk && chk.content && b64decode(chk.content).includes(line.trim().slice(2, 20));
+  if (!okWrite){
+    const ex2 = await gh('GET', path).catch(() => null);
+    const cur2 = ex2 && ex2.content ? b64decode(ex2.content) : '';
+    const b2 = { message: `durable: ${stamp} retry`, content: b64encode(cur2 + line), branch: cfg.branch };
+    if (ex2 && ex2.sha) b2.sha = ex2.sha;
+    await gh('PUT', path, b2);
+    DURABLE = cur2 + line;
+    alog('durable.retry', { stamp });
+  } else {
+    DURABLE = cur + line;
+  }
 }
 /* ---------- 离线队列：写不出去先存本地，联网后补传 ---------- */
 const QUEUE_KEY = 'alan.queue.v1';
@@ -1114,6 +1127,32 @@ function memorySearch(q){
   return top.map((r) => `[${r.src}] ${r.line.slice(0, 200)}`).join('\n');
 }
 
+/* 仓库历史检索：本地包里查不到的旧事，去私有仓最近 12 天的手机笔记里找 */
+async function memorySearchRemote(q){
+  if (!cfg.repo || !cfg.pat) return '';
+  const terms = String(q || '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6);
+  if (!terms.length) return '';
+  const list = await gh('GET', `${cfg.prefix}/phone`).catch(() => null);
+  if (!Array.isArray(list)) return '';
+  const files = list.filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f.name))
+    .sort((a, b) => b.name.localeCompare(a.name)).slice(0, 12);
+  const hits = [];
+  for (const f of files){
+    const c = await gh('GET', f.path).catch(() => null);
+    if (!c || !c.content) continue;
+    for (const raw of b64decodeUtf8(c.content).split(/\r?\n/)){
+      const line = raw.trim();
+      if (line.length < 8) continue;
+      const low = line.toLowerCase();
+      let score = 0;
+      for (const t of terms) if (low.includes(t)) score++;
+      if (score) hits.push({ day: f.name.slice(0, 10), score, line });
+    }
+  }
+  hits.sort((a, b) => (b.score - a.score) || b.day.localeCompare(a.day));
+  return hits.slice(0, 8).map((h) => `[${h.day} 手机笔记] ${h.line.slice(0, 200)}`).join('\n');
+}
+
 const SEARCH_TOOL = {
   type: 'function',
   function: {
@@ -1153,6 +1192,7 @@ function systemPrompt(){
   parts.push('你可以用 send_sticker 发「大肥鱼」表情包（你自己就是那条鲸鱼娘）。聊天轻松、用户情绪明显、或用户要表情包时用；一条回复最多一张；严肃答题不发。');
   parts.push('记忆工具：memory_search 查已有记忆（不确定旧约定/旧结论时先用它）；memory_write 把本轮一句结论记进今日笔记。');
   parts.push('长期记忆（memory_note）怎么判断：只要是关于 Benjo1 本人、跨天仍然成立的信息就记——稳定偏好、常用设备与型号、长期习惯、作息与限制、已确定的做法或约定、长期目标。不用等他明说“记住”，你觉得以后会反复用到就写；一次性的答案、当天新闻、临时结论才只进当天笔记。');
+  parts.push('记忆包含义：recent.md = 电脑端最近做的事；digest.md = 更早的压缩摘要；durable.md = 手机端记下的长期事实；persona/rules/style = 人格与规矩。查旧事先看 recent/digest，不够再用 memory_search。');
   parts.push('数学公式直接写 $...$（行内）或 $$...$$（独立成行），不要用反引号包公式——反引号会被当成代码原样显示。');
   parts.push('如果用户发来图片：整页卷面可能被切成 2–3 段按顺序发来，请把每段都看完再答；回答前先列出你看到的所有小问（如 (a)~(e)，含 (e)(ii) 这类子项），漏掉或看不清就直说“这段看不清，请补拍”，不要凭印象补全。');
   parts.push('最后再确认一次身份：你在手机上叫「小蓝」，自称小蓝；「阿蓝」是电脑端那台的名字，不要混用。');
@@ -1397,6 +1437,10 @@ async function send(){
             else out = '（表情库未加载）';
           } else if (c.function.name === 'memory_search'){
             out = memorySearch(String(args.query || ''));
+            try{
+              const remote = await memorySearchRemote(String(args.query || ''));
+              if (remote) out += '\n\n【仓库历史命中】\n' + remote;
+            }catch(e){ alog('mem.remote.err', e.message); }
           } else if (c.function.name === 'memory_write'){
             try{ await pushNoteSafe('📌 ' + String(args.text || '')); out = '已记到今日手机笔记，下次同步到电脑'; }
             catch(e){ out = '写入失败：' + e.message; }
