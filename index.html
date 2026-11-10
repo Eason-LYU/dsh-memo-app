@@ -318,7 +318,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.53 · 2026-11-10 21:40';
+const APP_VER = '1.54 · 2026-11-10 21:50';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1152,7 +1152,7 @@ function systemPrompt(){
   parts.push('如果用户发来 PDF，正文里会带【pN】页码标记；回答时按页码定位并标明出处（如“p7”），需要跨页串联就说明范围。');
   parts.push('你可以用 send_sticker 发「大肥鱼」表情包（你自己就是那条鲸鱼娘）。聊天轻松、用户情绪明显、或用户要表情包时用；一条回复最多一张；严肃答题不发。');
   parts.push('记忆工具：memory_search 查已有记忆（不确定旧约定/旧结论时先用它）；memory_write 把本轮一句结论记进今日笔记。');
-  parts.push('什么时候写长期记忆（memory_note）：出现「记住 / 以后都 / 每次 / 别再 / 我喜欢 / 我习惯」这类话，或是一条跨天仍成立的事实（设备型号、账号口径、做法约定、作息限制），就用 memory_note 记一条，别只写当天笔记；一次性问答才用 memory_write。宁可多记一条长期，也别让它只活在今天。');
+  parts.push('长期记忆（memory_note）怎么判断：只要是关于 Benjo1 本人、跨天仍然成立的信息就记——稳定偏好、常用设备与型号、长期习惯、作息与限制、已确定的做法或约定、长期目标。不用等他明说“记住”，你觉得以后会反复用到就写；一次性的答案、当天新闻、临时结论才只进当天笔记。');
   parts.push('数学公式直接写 $...$（行内）或 $$...$$（独立成行），不要用反引号包公式——反引号会被当成代码原样显示。');
   parts.push('如果用户发来图片：整页卷面可能被切成 2–3 段按顺序发来，请把每段都看完再答；回答前先列出你看到的所有小问（如 (a)~(e)，含 (e)(ii) 这类子项），漏掉或看不清就直说“这段看不清，请补拍”，不要凭印象补全。');
   parts.push('最后再确认一次身份：你在手机上叫「小蓝」，自称小蓝；「阿蓝」是电脑端那台的名字，不要混用。');
@@ -1742,6 +1742,50 @@ function b64decodeUtf8(s){
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
   return new TextDecoder().decode(arr);
 }
+/* 自动升格：每天一次，把当天笔记里「跨天还成立」的条目挑进长期记忆 */
+async function autoPromoteDurable(){
+  if (!cfg.repo || !cfg.pat || !cfg.key) return;
+  const today = new Date().toISOString().slice(0, 10);
+  if (localStorage.getItem('alan.promote') === today) return;
+  try{
+    const dPath = `${cfg.prefix}/phone/durable.md`;
+    const d = await gh('GET', dPath).catch(() => null);
+    const dur = d && d.content ? b64decodeUtf8(d.content) : '';
+    const nf = await gh('GET', `${cfg.prefix}/phone/${today}.md`).catch(() => null);
+    if (!nf || !nf.content){ return; }
+    localStorage.setItem('alan.promote', today);
+    const notes = b64decodeUtf8(nf.content).split('\n').filter((l) => l.trim()).slice(-50).join('\n');
+    const r = await fetch(cfg.base.replace(/\/$/,'') + '/chat/completions', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + cfg.key },
+      body: JSON.stringify({
+        model:'deepseek-flash', temperature:0, thinking:{ type:'disabled' }, max_tokens:600,
+        messages:[
+          { role:'system', content:'从今天的日记里挑出「跨天仍然成立、以后还会用到」的条目：用户本人的稳定偏好、常用设备/型号、长期习惯、作息与限制、已确定的做法或约定、长期目标。一次性的答案、当天新闻、临时结论不要。已有长期记忆里已覆盖的内容不要重复。只输出 JSON 字符串数组，最多 6 条，每条一句中文，不加日期；没有就输出 []。' },
+          { role:'user', content: `已有长期记忆：\n${dur || '（空）'}\n\n今天的日记：\n${notes}` },
+        ],
+      }),
+    });
+    if (!r.ok){ alog('promote.err', { status: r.status }); return; }
+    const j = await r.json();
+    let txt = (j.choices && j.choices[0] && j.choices[0].message.content || '').trim();
+    txt = txt.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+    let arr = [];
+    try{ arr = JSON.parse(txt); }catch{ return; }
+    if (!Array.isArray(arr)) return;
+    const fresh = arr.filter((s) => typeof s === 'string' && s.trim().length > 4)
+      .filter((s) => !dur.includes(s.trim().slice(0, 10)))
+      .slice(0, 6);
+    if (!fresh.length) return;
+    const add = fresh.map((s) => '- ' + today + ' ' + s.replace(/^[-–]\s*/, '').trim()).join('\n');
+    const next = (dur ? dur.replace(/\n*$/, '\n') : '') + add + '\n';
+    const body = { message:'memory: 自动升格长期记忆', content: b64encode(next), branch: cfg.branch };
+    if (d && d.sha) body.sha = d.sha;
+    await gh('PUT', dPath, body);
+    alog('promote.ok', { n: fresh.length });
+  }catch(e){ alog('promote.err', { msg: e.message }); }
+}
+
 async function openDurable(){
   $('durableText').value = '读取中…';
   try{
@@ -1937,6 +1981,7 @@ $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新�
   setTimeout(showRenderBanner, 600);
   if (!cfg.repo || !cfg.pat){ setStatus('', '未配置记忆'); return; }
   try{ await pullPack(); }catch(e){ alog('pack.err', e.message); setStatus('warn','记忆未同步'); }
+  setTimeout(()=>{ autoPromoteDurable(); }, 4000);
 })();
 </script>
 </body>
