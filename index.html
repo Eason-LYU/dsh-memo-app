@@ -318,7 +318,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.55 · 2026-11-10 22:10';
+const APP_VER = '1.56 · 2026-11-10 22:16';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -557,7 +557,7 @@ async function normalizeRepo(){
 }
 async function pullPack(){
   await normalizeRepo();
-  const names = ['persona.md','rules.md','style.md','recent.md','skills.md','meta.json'];
+  const names = ['persona.md','rules.md','style.md','recent.md','digest.md','durable.md','earlier.md','skills.md','meta.json'];
   const files = {}; const status = [];
   for (const n of names){
     let r = null;
@@ -1183,6 +1183,7 @@ function systemPrompt(){
   if (f['recent.md']) parts.push('# 用户最近在做的事（来自电脑，可能滞后）\n' + f['recent.md']);
   if (f['digest.md']) parts.push('# 近期要点（分层摘要：7 天 / 30 天）\n' + f['digest.md']);
   if (f['durable.md']) parts.push('# 长期事实（你在手机上记下的）\n' + f['durable.md']);
+  if (f['earlier.md']) parts.push('# 更早的事（只有索引）——你确实做过这些事，但细节不在这里；用户问到时先用 memory_search 去仓库翻原文，翻不到就说“只记得有这么回事，细节想不起来”\n' + f['earlier.md']);
   if (f['skills.md']) parts.push('# 已固化的技能\n' + f['skills.md']);
   parts.push('你现在跑在手机上：看不到电脑文件、不能执行任务。需要动手时说明回电脑继续。结论先行，适合手机阅读。');
   parts.push(cfg.web === 'off'
