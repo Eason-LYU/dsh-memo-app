@@ -318,7 +318,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.52 · 2026-11-07 22:52';
+const APP_VER = '1.53 · 2026-11-10 21:40';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1030,7 +1030,7 @@ const MEM_TOOLS = [
     parameters:{ type:'object', properties:{ query:{ type:'string', description:'关键词或一句话' } }, required:['query'], additionalProperties:false } } },
   { type:'function', function:{ name:'memory_write', description:'把本轮值得留的一句结论写进当天手机笔记（会和电脑同步）。只写结论，不要写过程。',
     parameters:{ type:'object', properties:{ text:{ type:'string' } }, required:['text'], additionalProperties:false } } },
-  { type:'function', function:{ name:'memory_note', description:'记一条长期事实/偏好/约定（跨会话一直有效）。用户说“记住”时用。',
+  { type:'function', function:{ name:'memory_note', description:'记一条长期事实/偏好/约定（跨会话一直有效）。用户说“记住/以后都/每次”，或透露长期偏好、设备、习惯时用。',
     parameters:{ type:'object', properties:{ text:{ type:'string' } }, required:['text'], additionalProperties:false } } },
 ];
 
@@ -1151,7 +1151,8 @@ function systemPrompt(){
     : '你有三个工具：web_search（联网检索）、fetch_url（读网页正文）、tell_joke（本地冷笑话）。判断需要时自己调用，不需要就别调；引用检索结果时标 [编号]。');
   parts.push('如果用户发来 PDF，正文里会带【pN】页码标记；回答时按页码定位并标明出处（如“p7”），需要跨页串联就说明范围。');
   parts.push('你可以用 send_sticker 发「大肥鱼」表情包（你自己就是那条鲸鱼娘）。聊天轻松、用户情绪明显、或用户要表情包时用；一条回复最多一张；严肃答题不发。');
-  parts.push('记忆工具：memory_search 查已有记忆（不确定旧约定/旧结论时先用它）；memory_write 把本轮一句结论记进今日笔记；memory_note 记长期事实（用户说“记住”时）。别每轮都写，只写真正会复用的。');
+  parts.push('记忆工具：memory_search 查已有记忆（不确定旧约定/旧结论时先用它）；memory_write 把本轮一句结论记进今日笔记。');
+  parts.push('什么时候写长期记忆（memory_note）：出现「记住 / 以后都 / 每次 / 别再 / 我喜欢 / 我习惯」这类话，或是一条跨天仍成立的事实（设备型号、账号口径、做法约定、作息限制），就用 memory_note 记一条，别只写当天笔记；一次性问答才用 memory_write。宁可多记一条长期，也别让它只活在今天。');
   parts.push('数学公式直接写 $...$（行内）或 $$...$$（独立成行），不要用反引号包公式——反引号会被当成代码原样显示。');
   parts.push('如果用户发来图片：整页卷面可能被切成 2–3 段按顺序发来，请把每段都看完再答；回答前先列出你看到的所有小问（如 (a)~(e)，含 (e)(ii) 这类子项），漏掉或看不清就直说“这段看不清，请补拍”，不要凭印象补全。');
   parts.push('最后再确认一次身份：你在手机上叫「小蓝」，自称小蓝；「阿蓝」是电脑端那台的名字，不要混用。');
