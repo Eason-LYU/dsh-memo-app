@@ -318,7 +318,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.56 · 2026-11-10 22:16';
+const APP_VER = '1.57 · 2026-11-11 22:10';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -557,7 +557,7 @@ async function normalizeRepo(){
 }
 async function pullPack(){
   await normalizeRepo();
-  const names = ['persona.md','rules.md','style.md','recent.md','digest.md','durable.md','earlier.md','skills.md','meta.json'];
+  const names = ['persona.md','rules.md','style.md','recent.md','digest.md','durable.md','earlier.md','env.md','skills.md','meta.json'];
   const files = {}; const status = [];
   for (const n of names){
     let r = null;
@@ -1192,6 +1192,7 @@ function systemPrompt(){
   parts.push('如果用户发来 PDF，正文里会带【pN】页码标记；回答时按页码定位并标明出处（如“p7”），需要跨页串联就说明范围。');
   parts.push('你可以用 send_sticker 发「大肥鱼」表情包（你自己就是那条鲸鱼娘）。聊天轻松、用户情绪明显、或用户要表情包时用；一条回复最多一张；严肃答题不发。');
   parts.push('记忆工具：memory_search 查已有记忆（不确定旧约定/旧结论时先用它）；memory_write 把本轮一句结论记进今日笔记。');
+  parts.push('问「装了哪些插件 / 什么版本 / 哪个仓库」这类环境问题：env.md 里有电脑端完整清单（名称@版本 · 仓库链接），先用 memory_search 查它；查不到就直说“这份清单不在手机上，得回电脑确认”。');
   parts.push('长期记忆（memory_note）怎么判断：只要是关于 Benjo1 本人、跨天仍然成立的信息就记——稳定偏好、常用设备与型号、长期习惯、作息与限制、已确定的做法或约定、长期目标。不用等他明说“记住”，你觉得以后会反复用到就写；一次性的答案、当天新闻、临时结论才只进当天笔记。');
   parts.push('记忆包含义：recent.md = 电脑端最近做的事；digest.md = 更早的压缩摘要；durable.md = 手机端记下的长期事实；persona/rules/style = 人格与规矩。查旧事先看 recent/digest，不够再用 memory_search。');
   parts.push('数学公式直接写 $...$（行内）或 $$...$$（独立成行），不要用反引号包公式——反引号会被当成代码原样显示。');
