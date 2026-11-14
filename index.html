@@ -318,7 +318,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.58 · 2026-11-14 10:40';
+const APP_VER = '1.59 · 2026-11-14 17:30';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1927,10 +1927,11 @@ async function fixAsrText(raw){
 /* SiliconFlow 语音转写：MediaRecorder 录音 → /v1/audio/transcriptions */
 let sfRec = null, sfChunks = [];
 /* 录音 Blob → 16k 单声道 WAV → DeepSeek ASR（或不支持时回退 SiliconFlow） */
-async function blobToWav16k(blob){
+async function blobToWav16k(blob, ctxIn){
   const ab = await blob.arrayBuffer();
   const AC = window.AudioContext || window.webkitAudioContext;
-  const ctx = new AC();
+  const ctx = ctxIn || new AC();
+  try{ if (ctx.state === 'suspended') await ctx.resume(); }catch{}
   const audio = await ctx.decodeAudioData(ab.slice(0));
   const target = 16000;
   const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(audio.duration * target)), target);
@@ -1951,10 +1952,10 @@ async function blobToWav16k(blob){
   return new Blob([buf], { type: 'audio/wav' });
 }
 
-async function transcribeBlob(blob, type){
+async function transcribeBlob(blob, type, ctxIn){
   const eng = cfg.asrEngine || 'ds';
   if (eng === 'ds'){
-    const wav = await blobToWav16k(blob);
+    const wav = await blobToWav16k(blob, ctxIn);
     const fd = new FormData();
     fd.append('file', wav, 'voice.wav');
     const r = await fetch(cfg.base.replace(/\/$/, '') + '/v1/tools/asr', {
@@ -1976,40 +1977,62 @@ async function transcribeBlob(blob, type){
   return (j.text || '').trim();
 }
 
+let asrBusy = false, asrCtx = null;
 async function startSfRec(){
+  if (asrBusy){ toast('上一条还在识别，稍等一下', 2200); return; }
+  let stream = null;
   try{
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
-    sfRec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-    sfChunks = [];
-    sfRec.ondataavailable = (e)=>{ if (e.data && e.data.size) sfChunks.push(e.data); };
-    sfRec.onstop = async ()=>{
-      stream.getTracks().forEach((t) => t.stop());
-      micSetOn(false);
-      const type = sfRec.mimeType || mime || 'audio/mp4';
-      const blob = new Blob(sfChunks, { type });
-      if (blob.size < 1500){ toast('录音太短，再来一次', 2000); return; }
-      toast('正在识别…', 1500);
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // iOS 必须在用户手势里创建/恢复 AudioContext，否则 onstop 里解码会一直挂住
     try{
-      const text = await transcribeBlob(blob, type);
-      alog('asr.ok', { chars: text.length, bytes: blob.size });
-      if (!text){ toast('没听清，再说一次', 2400); return; }
-      const inp = $('input');
-      inp.value = micBase + text;
-      inp.dispatchEvent(new Event('input'));
-      if (cfg.asrFix === 'on' && cfg.key){
-        const fixed = await fixAsrText(inp.value);
-        if (fixed && fixed !== inp.value){ inp.value = fixed; inp.dispatchEvent(new Event('input')); }
+      if (!asrCtx) asrCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (asrCtx.state === 'suspended') await asrCtx.resume();
+    }catch(err){ alog('asr.ctx.err', err.message); }
+    const mime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    const chunks = [];
+    sfRec = rec; sfChunks = chunks;
+    rec.ondataavailable = (ev)=>{ if (ev.data && ev.data.size) chunks.push(ev.data); };
+    rec.onstop = async ()=>{
+      const usedCtx = asrCtx;
+      try{ stream.getTracks().forEach((t) => t.stop()); }catch{}
+      micSetOn(false);
+      asrBusy = true;
+      const type = rec.mimeType || mime || 'audio/mp4';
+      const blob = new Blob(chunks, { type });
+      alog('asr.stopped', { bytes: blob.size, type });
+      try{
+        if (blob.size < 1500){ toast('录音太短，再来一次', 2000); return; }
+        toast('正在识别…', 1500);
+        const text = await Promise.race([
+          transcribeBlob(blob, type, usedCtx),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('识别超时（20 秒）')), 20000)),
+        ]);
+        alog('asr.ok', { chars: (text || '').length, bytes: blob.size });
+        if (!text){ toast('没听清，再说一次', 2400); return; }
+        const inp = $('input');
+        inp.value = micBase + text;
+        inp.dispatchEvent(new Event('input'));
+        if (cfg.asrFix === 'on' && cfg.key){
+          const fixed = await fixAsrText(inp.value);
+          if (fixed && fixed !== inp.value){ inp.value = fixed; inp.dispatchEvent(new Event('input')); }
+        }
+      }catch(err){
+        toast('识别失败：' + err.message, 3800);
+        alog('asr.err', { msg: err.message });
+      }finally{
+        asrBusy = false;
       }
-      }catch(e){ toast('识别失败：' + e.message, 3600); alog('asr.err', { msg: e.message }); }
     };
-    sfRec.start();
+    rec.start();
     micSetOn(true);
+    alog('asr.start', { mime });
     toast('录音中，说完再点一次', 1800);
-  }catch(e){
+  }catch(err){
     micSetOn(false);
-    toast('麦克风打不开：' + (e.message || e.name), 4000);
-    alog('asr.mic.err', { name: e.name, msg: e.message });
+    if (stream) { try{ stream.getTracks().forEach((t) => t.stop()); }catch{} }
+    toast('麦克风打不开：' + (err.message || err.name), 4000);
+    alog('asr.mic.err', { name: err.name, msg: err.message });
   }
 }
 
