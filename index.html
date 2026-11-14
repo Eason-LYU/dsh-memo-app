@@ -318,7 +318,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.59 · 2026-11-14 17:30';
+const APP_VER = '1.60 · 2026-11-14 20:20';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -2117,6 +2117,14 @@ $('btnMemoPull').onclick = async ()=>{ try{ await pullPack(); toast('已重新�
 
 /* 启动 */
 (async function boot(){
+  // 一次性迁移：旧配置的 asrEngine 是 'sys'（旧默认），改成录音转写路线
+  try{
+    if (!localStorage.getItem('alan.migr.asr')){
+      if (!cfg.asrEngine || cfg.asrEngine === 'sys'){ cfg.asrEngine = 'ds'; saveCfg(); }
+      localStorage.setItem('alan.migr.asr', '1');
+      alog('migr.asr', { engine: cfg.asrEngine });
+    }
+  }catch{}
   alog('boot', { ver: APP_SHORT, online: navigator.onLine, standalone: !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches), mic: !!(window.SpeechRecognition || window.webkitSpeechRecognition) });
   if ('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
   syncTools(); renderMemo();
