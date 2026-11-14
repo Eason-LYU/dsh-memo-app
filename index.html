@@ -262,7 +262,7 @@
     <div class="row"><label>分支</label><input id="cfgBranch" placeholder="main" /></div>
     <div class="row"><label>PAT</label><input id="cfgPat" type="password" placeholder="github_pat_…" autocomplete="off" /></div>
     <div class="row"><label>包目录</label><input id="cfgPrefix" placeholder="pack" /></div>
-    <div class="row"><label>语音引擎</label><select id="cfgAsr"><option value="sys">系统听写（免费，主屏幕模式常失败）</option><option value="sf">SiliconFlow SenseVoice（准，需 Key）</option></select></div>
+    <div class="row"><label>语音引擎</label><select id="cfgAsr"><option value="ds">DeepSeek ASR（推荐，录音上传转写）</option><option value="sys">系统听写（免费，主屏幕模式常失败）</option><option value="sf">SiliconFlow SenseVoice（需额外 Key）</option></select></div>
     <div class="row"><label>SF Key</label><input id="cfgSfKey" type="password" placeholder="sk-…（硅基流动，可选）" autocomplete="off" /></div>
     <p class="note">Key 与 PAT 只存在这台手机的浏览器里。PAT 只需数据仓的 Contents 读写权限。</p>
     <p class="note" id="verLine"></p>
@@ -318,7 +318,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.57 · 2026-11-11 22:10';
+const APP_VER = '1.58 · 2026-11-14 10:40';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -340,7 +340,7 @@ const cfg = Object.assign({
   key:'', model:'deepseek-flash', theme:'light',
   base:'https://api.deepseek.com',
   repo:'', branch:'main', pat:'', prefix:'pack',
-  web:'auto', think:'auto', effort:'high', autonote:'on', slice:'off', asrFix:'on', asrEngine:'sys', sfKey:'',
+  web:'auto', think:'auto', effort:'high', autonote:'on', slice:'off', asrFix:'on', asrEngine:'ds', sfKey:'',
 }, JSON.parse(localStorage.getItem(LS) || '{}'));
 
 const $ = (id) => document.getElementById(id);
@@ -1187,8 +1187,8 @@ function systemPrompt(){
   if (f['skills.md']) parts.push('# 已固化的技能\n' + f['skills.md']);
   parts.push('你现在跑在手机上：看不到电脑文件、不能执行任务。需要动手时说明回电脑继续。结论先行，适合手机阅读。');
   parts.push(cfg.web === 'off'
-    ? '你有两个工具：fetch_url（读网页正文）、tell_joke（本地冷笑话）。需要时自己调用。'
-    : '你有三个工具：web_search（联网检索）、fetch_url（读网页正文）、tell_joke（本地冷笑话）。判断需要时自己调用，不需要就别调；引用检索结果时标 [编号]。');
+    ? '联网已关闭：不知道的事就说不确定，不要编。笑话用 tell_joke。'
+    : '联网和读链接由服务端自动完成（deepseek_web_search / deepseek_read_url），你不需要自己调用搜索工具；引用来源时标 [编号]。笑话用 tell_joke。');
   parts.push('如果用户发来 PDF，正文里会带【pN】页码标记；回答时按页码定位并标明出处（如“p7”），需要跨页串联就说明范围。');
   parts.push('你可以用 send_sticker 发「大肥鱼」表情包（你自己就是那条鲸鱼娘）。聊天轻松、用户情绪明显、或用户要表情包时用；一条回复最多一张；严肃答题不发。');
   parts.push('记忆工具：memory_search 查已有记忆（不确定旧约定/旧结论时先用它）；memory_write 把本轮一句结论记进今日笔记。');
@@ -1226,11 +1226,32 @@ function buildHistory(prior){
   }
   return out;
 }
+/* 服务端文件解析：上传到 /files 拿 file_id，聊天里按 file_id 引用（PDF/Office/图片都行） */
+async function uploadDoc(f, rich){
+  if (!cfg.key) throw new Error('没配置 API Key');
+  const fd = new FormData();
+  fd.append('purpose', rich ? 'rich_layout_recognition' : 'text_recognition');
+  fd.append('file', f, f.name);
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 180000);
+  try{
+    const r = await fetch(cfg.base.replace(/\/$/,'') + '/files', {
+      method:'POST', headers:{ Authorization:'Bearer ' + cfg.key }, body: fd, signal: ctl.signal,
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()).slice(0, 120));
+    const j = await r.json();
+    if (!j.id) throw new Error('没拿到 file_id');
+    alog('file.uploaded', { name: f.name, bytes: j.bytes, id: j.id.slice(0, 18) });
+    return j.id;
+  } finally { clearTimeout(timer); }
+}
+
 function buildUserContent(text){
   if (!attachments.length) return text;
   const parts = [{ type:'text', text: text || '' }];
   for (const a of attachments){
     if (a.kind === 'image') parts.push({ type:'image_url', image_url: { url: a.dataUrl } });
+    else if (a.kind === 'doc') parts.push({ type:'file', file_id: a.fileId });
     else if (a.kind === 'pdf') parts.push({ type:'text', text: `【附件 PDF：${a.name}】\n${a.text}` });
     else if (a.kind === 'text') parts.push({ type:'text', text: `【附件文本：${a.name}】\n${a.text}` });
     else parts.push({ type:'text', text: `【附件：${a.name}】（手机端无法解析此格式，仅能看到文件名）` });
@@ -1398,9 +1419,12 @@ async function send(){
     setStatus('ok','记忆已同步');
   }
 
-  const tools = cfg.web === 'off'
-    ? [FETCH_TOOL, JOKE_TOOL, STICKER_TOOL, ...MEM_TOOLS]
-    : [SEARCH_TOOL, FETCH_TOOL, JOKE_TOOL, STICKER_TOOL, ...MEM_TOOLS];
+  // 服务端内置工具（搜索/读链接由 DeepSeek 自己执行，不用客户端回传结果）
+  const tools = [];
+  if (cfg.web !== 'off') tools.push({ type: 'deepseek_web_search' });
+  tools.push({ type: 'deepseek_read_url' });
+  tools.push(JOKE_TOOL, STICKER_TOOL, ...MEM_TOOLS);
+  if (!cfg.key) tools.length = 0;
 
   try{
     let collected = '';
@@ -1591,6 +1615,23 @@ $('fileDoc').onchange = async (e)=>{
   for (const f of e.target.files){
     if (f.size > 30*1024*1024){ toast('文件太大（>30MB）'); continue; }
     const isPdf = /\.pdf$/i.test(f.name) || f.type === 'application/pdf';
+    const isOffice = /\.(docx?|pptx?|xlsx?)$/i.test(f.name);
+    const isImgDoc = /^image\//.test(f.type || '') && false; // 图片走「图片」按钮
+    const textLike = /\.(txt|md|csv|json|log|ya?ml|html?)$/i.test(f.name) || /^text\//.test(f.type || '');
+    // ① 先试服务端解析（PDF/Office 都能读，含图表版面）
+    if (isPdf || isOffice){
+      toast('正在上传解析…', 6000);
+      try{
+        const fileId = await uploadDoc(f, isPdf || /\.pptx?$/i.test(f.name));
+        attachments.push({ kind:'doc', name:f.name, fileId });
+        toast(`已上传，由服务端解析：${f.name}`, 3200);
+        continue;
+      }catch(err){
+        alog('file.upload.err', err.message);
+        if (!isPdf){ toast('上传失败：' + err.message + '（可转 PDF 或截图再发）', 4600); continue; }
+        toast('服务端解析失败，改用本机读取…', 3000);
+      }
+    }
     if (isPdf){
       toast('正在解析 PDF…', 4000);
       try{
@@ -1600,7 +1641,6 @@ $('fileDoc').onchange = async (e)=>{
       }catch(err){ toast('PDF 解析失败：' + err.message, 4000); }
       continue;
     }
-    const textLike = /\.(txt|md|csv|json|log|ya?ml|html?)$/i.test(f.name) || /^text\//.test(f.type || '');
     if (textLike){
       const raw = await f.text();
       attachments.push({ kind:'text', name:f.name, text: raw.slice(0, 20000) });
@@ -1697,7 +1737,7 @@ function fillSettings(){
   $('cfgAutoNote').value = cfg.autonote || 'on';
   $('cfgTheme').value = cfg.theme; $('cfgBase').value = cfg.base; $('cfgRepo').value = cfg.repo;
   $('cfgBranch').value = cfg.branch; $('cfgPat').value = cfg.pat; $('cfgPrefix').value = cfg.prefix;
-  $('cfgAsr').value = cfg.asrEngine || 'sys'; $('cfgSfKey').value = cfg.sfKey || '';
+  $('cfgAsr').value = cfg.asrEngine || 'ds'; $('cfgSfKey').value = cfg.sfKey || '';
   updateVerLine();
 }
 $('btnSet').onclick = ()=>{ fillSettings(); syncSliceBtn(); syncAsrBtn(); $('sheetSet').classList.add('open'); };
@@ -1886,6 +1926,56 @@ async function fixAsrText(raw){
 
 /* SiliconFlow 语音转写：MediaRecorder 录音 → /v1/audio/transcriptions */
 let sfRec = null, sfChunks = [];
+/* 录音 Blob → 16k 单声道 WAV → DeepSeek ASR（或不支持时回退 SiliconFlow） */
+async function blobToWav16k(blob){
+  const ab = await blob.arrayBuffer();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AC();
+  const audio = await ctx.decodeAudioData(ab.slice(0));
+  const target = 16000;
+  const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(audio.duration * target)), target);
+  const src = off.createBufferSource();
+  src.buffer = audio; src.connect(off.destination); src.start();
+  const rendered = await off.startRendering();
+  try{ ctx.close(); }catch{}
+  const pcm = rendered.getChannelData(0);
+  const buf = new ArrayBuffer(44 + pcm.length * 2);
+  const v = new DataView(buf);
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, 'RIFF'); v.setUint32(4, 36 + pcm.length * 2, true); ws(8, 'WAVE');
+  ws(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, target, true); v.setUint32(28, target * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  ws(36, 'data'); v.setUint32(40, pcm.length * 2, true);
+  let o = 44;
+  for (let i = 0; i < pcm.length; i++){ const s = Math.max(-1, Math.min(1, pcm[i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true); o += 2; }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+async function transcribeBlob(blob, type){
+  const eng = cfg.asrEngine || 'ds';
+  if (eng === 'ds'){
+    const wav = await blobToWav16k(blob);
+    const fd = new FormData();
+    fd.append('file', wav, 'voice.wav');
+    const r = await fetch(cfg.base.replace(/\/$/, '') + '/v1/tools/asr', {
+      method:'POST', headers:{ Authorization: 'Bearer ' + cfg.key }, body: fd,
+    });
+    if (!r.ok) throw new Error('ASR HTTP ' + r.status + ' ' + (await r.text()).slice(0, 120));
+    const j = await r.json();
+    alog('asr.ds.ok', { ms: j.duration_ms, chars: (j.text || '').length });
+    return (j.text || '').trim();
+  }
+  const fd = new FormData();
+  fd.append('file', blob, 'voice.' + (String(type).includes('mp4') ? 'm4a' : 'webm'));
+  fd.append('model', 'FunAudioLLM/SenseVoiceSmall');
+  const r = await fetch('https://api.siliconflow.cn/v1/audio/transcriptions', {
+    method:'POST', headers:{ Authorization: 'Bearer ' + cfg.sfKey }, body: fd,
+  });
+  if (!r.ok) throw new Error('SF HTTP ' + r.status);
+  const j = await r.json();
+  return (j.text || '').trim();
+}
+
 async function startSfRec(){
   try{
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1900,25 +1990,17 @@ async function startSfRec(){
       const blob = new Blob(sfChunks, { type });
       if (blob.size < 1500){ toast('录音太短，再来一次', 2000); return; }
       toast('正在识别…', 1500);
-      try{
-        const fd = new FormData();
-        fd.append('file', blob, 'voice.' + (type.includes('mp4') ? 'm4a' : 'webm'));
-        fd.append('model', 'FunAudioLLM/SenseVoiceSmall');
-        const r = await fetch('https://api.siliconflow.cn/v1/audio/transcriptions', {
-          method:'POST', headers:{ Authorization: 'Bearer ' + cfg.sfKey }, body: fd,
-        });
-        if (!r.ok){ toast('识别失败 HTTP ' + r.status, 4000); alog('asr.err', { status: r.status }); return; }
-        const j = await r.json();
-        const text = (j.text || '').trim();
-        alog('asr.ok', { chars: text.length, bytes: blob.size });
-        if (!text){ toast('没听清，再说一次', 2400); return; }
-        const inp = $('input');
-        inp.value = micBase + text;
-        inp.dispatchEvent(new Event('input'));
-        if (cfg.asrFix === 'on' && cfg.key){
-          const fixed = await fixAsrText(inp.value);
-          if (fixed && fixed !== inp.value){ inp.value = fixed; inp.dispatchEvent(new Event('input')); }
-        }
+    try{
+      const text = await transcribeBlob(blob, type);
+      alog('asr.ok', { chars: text.length, bytes: blob.size });
+      if (!text){ toast('没听清，再说一次', 2400); return; }
+      const inp = $('input');
+      inp.value = micBase + text;
+      inp.dispatchEvent(new Event('input'));
+      if (cfg.asrFix === 'on' && cfg.key){
+        const fixed = await fixAsrText(inp.value);
+        if (fixed && fixed !== inp.value){ inp.value = fixed; inp.dispatchEvent(new Event('input')); }
+      }
       }catch(e){ toast('识别失败：' + e.message, 3600); alog('asr.err', { msg: e.message }); }
     };
     sfRec.start();
@@ -1982,8 +2064,9 @@ function micEnsure(){
   return recog;
 }
 $('btnMic').onclick = ()=>{
-  // SiliconFlow 路线：录音 → 上传转写（iOS 主屏幕模式不再依赖系统听写）
-  if ((cfg.asrEngine || 'sys') === 'sf' && cfg.sfKey){
+  // 录音 → 上传转写：DeepSeek ASR 优先（iOS 主屏幕模式不再依赖系统听写）
+  const eng = cfg.asrEngine || 'ds';
+  if (eng === 'ds' || (eng === 'sf' && cfg.sfKey)){
     if (sfRec && sfRec.state === 'recording'){ try{ sfRec.stop(); }catch{} return; }
     micBase = $('input').value ? $('input').value + ' ' : '';
     startSfRec();
