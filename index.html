@@ -318,7 +318,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.60 · 2026-11-14 20:20';
+const APP_VER = '1.61 · 2026-11-15 19:10';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1394,9 +1394,10 @@ async function send(){
     reasonDet.appendChild(reasonDiv);
     node.row.querySelector('.col').insertBefore(reasonDet, body);
   };
+  let maxSeen = 0;
   const ui = {
     onReason(t){ am.reasoning = t; ensureReason(); reasonDiv.textContent = t; feed.scrollTop = feed.scrollHeight; },
-    onContent(t){ am.content = t; scheduleRender(body, t, nearBottom()); savePartial(false); },
+    onContent(t){ am.content = t; if (t.length > maxSeen) maxSeen = t.length; scheduleRender(body, t, nearBottom()); savePartial(false); },
   };
 
   const prior = buildHistory(draft.slice(0, -1).slice(-18));
@@ -1489,6 +1490,11 @@ async function send(){
     }
 
     am.content = collected || '（这次没答上来：搜索用完三轮仍没收尾。可以直接再问一次，或把问题缩小一点。）';
+    if (maxSeen > am.content.length + 20){
+      alog('render.shrink', { streamed: maxSeen, final: am.content.length });
+      am.content = body.dataset.raw || am.content;
+      if (!am.content || am.content.length < maxSeen - 20) am.content = collected || am.content;
+    }
     alog('api.ok', { chars: am.content.length, toolCalls: am.sources.length });
     renderRich(body, am.content);
     if (am.sticker){
