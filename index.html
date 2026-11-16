@@ -318,7 +318,7 @@
 
 <script>
 'use strict';
-const APP_VER = '1.63 · 2026-11-15 23:05';
+const APP_VER = '1.64 · 2026-11-16 21:10';
 const APP_SHORT = 'v' + APP_VER.split(' ')[0];
 // 固定 key：以后加版本不再清空配置。旧的 v1/v2/v3 key 会自动迁移一次。
 const LS = 'alan.cfg.v1';
@@ -1216,7 +1216,36 @@ function buildHistory(prior){
     }
     out.unshift({ role:'user', content: parts });
   }
-  return out;
+  // 规范化：DeepSeek 要求「assistant 必须紧跟 user」，历史里断流/空回复会破坏这个结构
+  const fix = [];
+  for (const m of out){
+    if (m.role === 'assistant'){
+      const txt = Array.isArray(m.content)
+        ? m.content.map((p) => (p.type === 'text' ? p.text : '')).join('')
+        : String(m.content || '');
+      if (!txt.trim() && !(Array.isArray(m.content) && m.content.some((p) => p.type !== 'text'))) continue;
+    }
+    const last = fix[fix.length - 1];
+    if (last && last.role === m.role){
+      // 相邻同角色：合并成一条，避免 user,user / assistant,assistant
+      if (typeof last.content === 'string' && typeof m.content === 'string'){
+        last.content = (last.content + '\n\n' + m.content).trim();
+      } else {
+        const toParts = (c) => (Array.isArray(c) ? c : [{ type:'text', text: String(c || '') }]);
+        last.content = [...toParts(last.content), ...toParts(m.content)];
+      }
+      continue;
+    }
+    fix.push(typeof m.content === 'string' ? { ...m } : { ...m, content: m.content });
+  }
+  while (fix.length && fix[0].role !== 'user') fix.shift();
+  if (!fix.length){
+    // 全被清空时至少保留最后一条 user
+    const lastUser = out.filter((m) => m.role === 'user').slice(-1)[0];
+    if (lastUser) fix.push(lastUser);
+  }
+  alog('history.build', { raw: out.length, fixed: fix.length });
+  return fix;
 }
 /* 服务端文件解析：上传到 /files 拿 file_id，聊天里按 file_id 引用（PDF/Office/图片都行） */
 async function uploadDoc(f, rich){
